@@ -1,0 +1,22 @@
+# --- Secrets / local config (NEVER commit) ---
+.env
+.env.*
+!.env.example
+!.env.docker.example
+**/secrets/
+.claude/settings.local.json
+
+# --- Python ---
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# --- Tooling / editor ---
+.qodo/
+
+# --- OS / logs ---
+*.log
+.DS_Store
+Thumbs.db

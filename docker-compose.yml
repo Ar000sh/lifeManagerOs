@@ -1,0 +1,13 @@
+services:
+  lifeos-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: lifeos-bot
+    container_name: lifeos-bot
+    restart: unless-stopped          # auto-restart on crash / server reboot
+    env_file:
+      - telegram-bot/.env.docker     # copy from .env.docker.example and fill in
+    volumes:
+      # Google OAuth creds + saved token, mounted writable so tokens refresh in-place.
+      - ./telegram-bot/secrets:/app/secrets

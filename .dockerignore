@@ -1,0 +1,9 @@
+# Keep the build context small and secret-free
+telegram-bot/.venv/
+telegram-bot/.env
+telegram-bot/.env.docker
+telegram-bot/secrets/
+**/__pycache__/
+*.pyc
+.git/
+*.log
