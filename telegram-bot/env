@@ -1,0 +1,18 @@
+# Real config (git-ignored). Do not commit.
+
+TELEGRAM_BOT_TOKEN=8817151208:AAGRFRRzvbra7zLJ0kKSGOsCrtTvaFC_YGY
+
+# Leave 0 the first time; the bot will reply with your chat id. Paste it here and restart.
+ALLOWED_CHAT_ID=1672283963
+
+PROJECT_DIR=C:\Users\Saturn\Desktop\lifeMg
+
+# Notion internal integration token (starts with ntn_). Paste it after the = sign.
+NOTION_TOKEN=ntn_X48612427972Me9GhkuC5vQhPDHzVOV2MPzhdejhwhggww
+
+# Google Calendar (fill in after creating Google OAuth credentials — see README).
+# Local Windows paths:
+# GOOGLE_OAUTH_CREDENTIALS=C:\Users\Saturn\Desktop\lifeMg\telegram-bot\secrets\gcp-oauth.keys.json
+# GOOGLE_CALENDAR_MCP_TOKEN_PATH=C:\Users\Saturn\Desktop\lifeMg\telegram-bot\secrets\tokens
+
+# CLAUDE_MODEL=claude-opus-4-8
