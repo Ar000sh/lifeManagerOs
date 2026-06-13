@@ -26,5 +26,14 @@ COPY .claude /app/.claude
 COPY context /app/context
 COPY telegram-bot/bot.py ./bot.py
 
+# --- Run as a non-root user ---
+# The Claude CLI refuses --dangerously-skip-permissions (what the SDK's
+# permission_mode="bypassPermissions" maps to) when running as root, so a
+# root container exits 1 during the agent's init handshake. Run as 'app'.
+ENV HOME=/home/app
+RUN useradd --create-home --uid 1001 app \
+    && chown -R app:app /app
+USER app
+
 # Secrets (tokens, chat id) are provided at runtime via env / env_file — never baked in.
 CMD ["python", "bot.py"]

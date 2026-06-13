@@ -93,14 +93,23 @@ def build_options() -> ClaudeAgentOptions:
             "@cocal/google-calendar-mcp", gcal_env
         )
 
+    print(f"mcpServers {mcp_servers}")
+    logger.info("mcpServers: %s", str(mcp_servers))
     return ClaudeAgentOptions(
         cwd=PROJECT_DIR,
         # Load CLAUDE.md, .claude/commands skills, and any hosted connectors from your
         # Claude login (user settings).
         setting_sources=["user", "project", "local"],
         system_prompt={"type": "preset", "preset": "claude_code"},
-        # Headless: auto-approve tools (safe — only YOUR chat id can trigger runs).
-        permission_mode="bypassPermissions",
+        # Read-only filesystem: the bot organizes via the Notion/Calendar MCP
+        tools=["Read", "Glob", "Grep"],
+        # Default-deny instead of auto-approve-everything
+        permission_mode="dontAsk",
+        allowed_tools=[
+            "Read", "Glob", "Grep",
+            "mcp__notion-api",       # all Notion MCP tools (read + create/update)
+            "mcp__google-calendar",  # all Google Calendar MCP tools
+        ],
         model=CLAUDE_MODEL,
         mcp_servers=mcp_servers,
     )
@@ -131,8 +140,22 @@ def split_for_telegram(text: str) -> list[str]:
         return [text]
     parts, current = [], ""
     for line in text.split("\n"):
+        # a single line longer than the limit: hard-split it
+        if len(line) > TELEGRAM_MAX:
+            if current:
+                # if we have line that is longer than the limit and we already have something in the current before
+                # we need to add it as a chunk so we can keep the correct ordering of the text
+                parts.append(current)
+                current = ""
+            # Add chucks until the line is shorter that the limit
+            while len(line) > TELEGRAM_MAX:
+                parts.append(line[:TELEGRAM_MAX])
+                line = line[TELEGRAM_MAX:]
+        # till here we have made sure that the line on its own is shorter than the limit
+        # normal case: pack the line into the current chunk
         if len(current) + len(line) + 1 > TELEGRAM_MAX:
             if current:
+            # Same thing applies here we add the current to keep the correct ordering of the text
                 parts.append(current)
             current = line
         else:
