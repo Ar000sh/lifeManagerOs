@@ -1,0 +1,84 @@
+#cloud-config
+# Runs ONCE on first boot of the VM. Terraform's templatefile (in vm.tf) fills in the
+# template vars kv_name, acr_name and acr_login_server before the VM ever sees this file.
+# Shell $(...) and $i below are plain shell and run on the VM unchanged. See the doc file
+# cloud-init.yaml.tftpl.md for the brace-dollar escaping rule (kept out of this comment on
+# purpose, since templatefile evaluates comments too).
+
+write_files:
+  # The compose file that runs the bot. Static except for the image reference.
+  - path: /opt/lifeos/docker-compose.yml
+    content: |
+      services:
+        lifeos-bot:
+          image: ${acr_login_server}/lifeos-bot:latest
+          container_name: lifeos-bot
+          restart: unless-stopped
+          env_file:
+            - /opt/lifeos/.env
+          volumes:
+            - /opt/lifeos/secrets:/app/secrets
+          # Cap container logs so the chatty long-poll output can never fill the
+          # 30 GB disk: rotate at 10 MB, keep 3 files => ~30 MB hard ceiling.
+          logging:
+            driver: json-file
+            options:
+              max-size: "10m"
+              max-file: "3"
+
+  # The boot script: fetch secrets by Managed Identity, pull the image, run it.
+  # Retries wrap the identity/role-propagation gaps that happen on a fresh VM.
+  - path: /opt/lifeos/bootstrap.sh
+    permissions: "0755"
+    content: |
+      #!/usr/bin/env bash
+      mkdir -p /opt/lifeos/secrets
+
+      # 1) Wait for the Managed Identity + Key Vault role to be usable.
+      for i in $(seq 1 15); do
+        if az login --identity \
+           && az keyvault secret show --vault-name ${kv_name} --name TELEGRAM-BOT-TOKEN --query value -o tsv >/dev/null 2>&1; then
+          echo "identity + key vault access ready (attempt $i)"; break
+        fi
+        echo "waiting for identity/roles (attempt $i)..."; sleep 20
+      done
+
+      # 2) Build the container env file from the scalar secrets.
+      {
+        echo "TELEGRAM_BOT_TOKEN=$(az keyvault secret show --vault-name ${kv_name} --name TELEGRAM-BOT-TOKEN --query value -o tsv)"
+        echo "ALLOWED_CHAT_ID=$(az keyvault secret show --vault-name ${kv_name} --name ALLOWED-CHAT-ID --query value -o tsv)"
+        echo "NOTION_TOKEN=$(az keyvault secret show --vault-name ${kv_name} --name NOTION-TOKEN --query value -o tsv)"
+        echo "CLAUDE_CODE_OAUTH_TOKEN=$(az keyvault secret show --vault-name ${kv_name} --name CLAUDE-CODE-OAUTH-TOKEN --query value -o tsv)"
+        echo "GOOGLE_OAUTH_CREDENTIALS=/app/secrets/gcp-oauth.keys.json"
+        echo "GOOGLE_CALENDAR_MCP_TOKEN_PATH=/app/secrets/tokens"
+      } > /opt/lifeos/.env
+      chmod 600 /opt/lifeos/.env
+
+      # 3) Write the two Google file-secrets into the mounted secrets dir.
+      az keyvault secret show --vault-name ${kv_name} --name GCP-OAUTH-KEYS        --query value -o tsv > /opt/lifeos/secrets/gcp-oauth.keys.json
+      az keyvault secret show --vault-name ${kv_name} --name GOOGLE-CALENDAR-TOKENS --query value -o tsv > /opt/lifeos/secrets/tokens
+
+      # 4) Pull the image (retry while the AcrPull role propagates), then run.
+      for i in $(seq 1 10); do
+        if az acr login --name ${acr_name} && docker compose -f /opt/lifeos/docker-compose.yml pull; then
+          echo "image pulled (attempt $i)"; break
+        fi
+        echo "waiting for ACR pull (attempt $i)..."; sleep 20
+      done
+
+      docker compose -f /opt/lifeos/docker-compose.yml up -d
+
+runcmd:
+  # --- 2 GB swap: headroom for the 1 GB B1s during an agent run (avoids OOM kills) ---
+  - fallocate -l 2G /swapfile
+  - chmod 600 /swapfile
+  - mkswap /swapfile
+  - swapon /swapfile
+  - bash -c "echo '/swapfile none swap sw 0 0' >> /etc/fstab"
+  # --- Docker (official script installs docker-ce + the compose plugin) ---
+  - curl -fsSL https://get.docker.com | sh
+  - systemctl enable --now docker
+  # --- Azure CLI (so the VM can log in with its Managed Identity) ---
+  - curl -sL https://aka.ms/InstallAzureCLIDeb | bash
+  # --- Run the boot script ---
+  - bash /opt/lifeos/bootstrap.sh
