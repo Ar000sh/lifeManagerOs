@@ -1,18 +1,3 @@
-"""Custom bot metrics -> Azure Application Insights (Plan 3).
-
-A metrics-only OpenTelemetry pipeline. There is deliberately NO trace or log
-exporter here: the bot's logs already flow into the ContainerLogs_CL table
-(Plan 1), so shipping them again would duplicate data and cost.
-
-The whole module is a no-op unless APPLICATIONINSIGHTS_CONNECTION_STRING is
-set, so local runs and tests need no Azure access. Telemetry must never break
-message handling: setup failures disable it, and record failures are swallowed.
-
-Public interface:
-    init_telemetry()      - call once at startup
-    record_run(...)       - call once per handled message
-    shutdown_telemetry()  - call once on clean shutdown (flushes)
-"""
 import logging
 import os
 
@@ -28,7 +13,6 @@ _cost = None
 
 
 def init_telemetry():
-    """Wire the metrics-only OTel pipeline. Safe to call once at startup."""
     global _enabled, _provider, _messages, _duration, _tokens, _cost
 
     conn = os.environ.get("APPLICATIONINSIGHTS_CONNECTION_STRING", "").strip()
@@ -62,8 +46,8 @@ def init_telemetry():
 
 
 def record_run(skill, status, duration_s, usage=None):
-    """Record the metrics for one handled message. Never raises."""
     if not _enabled:
+        logger.error("Metric recording failed due to telemetry setup failure")
         return
     try:
         attrs = {"skill": skill, "status": status}
@@ -81,10 +65,10 @@ def record_run(skill, status, duration_s, usage=None):
 
 
 def shutdown_telemetry():
-    """Flush remaining metrics on a clean shutdown. No-op when disabled."""
     if not _enabled or _provider is None:
+        logger.error("Metric Shutdown nothing to shutdown due telemetry setup failure")
         return
     try:
         _provider.shutdown()
-    except Exception:  # noqa: BLE001
+    except Exception:
         logger.exception("telemetry shutdown failed")

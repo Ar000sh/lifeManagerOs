@@ -174,15 +174,24 @@ _KNOWN_SKILLS = {"today", "week", "add"}
 def detect_skill(text: str) -> str:
     """Bucket a message into a bounded, low-cardinality skill label.
 
+    A "/<skill>" token is detected anywhere in the message, not only at the
+    start, so "remind me to run /today" still maps to "today". Logic: split on
+    "/", then for each chunk that follows a slash, take its first word and check
+    it against the known skills; the first match wins.
+
     Returns one of: today | week | add | chat | other. Bounded on purpose so it
     is always safe to use as a metric dimension (see telemetry.py).
     """
     stripped = text.strip()
-    if stripped.startswith("/"):
-        rest = stripped[1:].split(maxsplit=1)
-        word = rest[0].lower() if rest else ""
-        return word if word in _KNOWN_SKILLS else "other"
-    return "chat"
+    if "/" not in stripped:
+        return "chat"
+    # Skip [0]: the text before the first "/" wasn't preceded by a slash, so its
+    # first word can't be a command. Every later chunk starts right after a "/".
+    for chunk in stripped.split("/")[1:]:
+        words = chunk.split()
+        if words and words[0].lower() in _KNOWN_SKILLS:
+            return words[0].lower()
+    return "other"
 
 
 def split_for_telegram(text: str) -> list[str]:
@@ -254,10 +263,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 # ---------------------------------------------------------------------------
 def main() -> None:
     if not TELEGRAM_TOKEN:
-        raise SystemExit("TELEGRAM_BOT_TOKEN is missing. Copy .env.example to .env and fill it in.")
-
-    logger.info("Project dir: %s", PROJECT_DIR)
-    logger.info("Allowed chat id: %s", ALLOWED_CHAT_ID or "(unset - setup mode)")
+        raise SystemExit("TELEGRAM_BOT_TOKEN is missing.")
 
     telemetry.init_telemetry()
 
