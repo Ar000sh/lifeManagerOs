@@ -133,6 +133,23 @@ async def run_agent(prompt: str) -> str:
 # ---------------------------------------------------------------------------
 # Telegram handlers
 # ---------------------------------------------------------------------------
+_KNOWN_SKILLS = {"today", "week", "add"}
+
+
+def detect_skill(text: str) -> str:
+    """Bucket a message into a bounded, low-cardinality skill label.
+
+    Returns one of: today | week | add | chat | other. Bounded on purpose so it
+    is always safe to use as a metric dimension (see telemetry.py).
+    """
+    stripped = text.strip()
+    if stripped.startswith("/"):
+        rest = stripped[1:].split(maxsplit=1)
+        word = rest[0].lower() if rest else ""
+        return word if word in _KNOWN_SKILLS else "other"
+    return "chat"
+
+
 def split_for_telegram(text: str) -> list[str]:
     """Telegram caps messages at 4096 chars; split on line boundaries."""
     if len(text) <= TELEGRAM_MAX:
