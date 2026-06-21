@@ -21,7 +21,7 @@ def _patch_stream(monkeypatch, message):
     # Make isinstance(message, ResultMessage) true and AssistantMessage never match.
     monkeypatch.setattr(bot, "ResultMessage", FakeResultMessage)
     monkeypatch.setattr(bot, "AssistantMessage", type("NoMatch", (), {}))
-    monkeypatch.setattr(bot, "build_options", lambda: None)
+    monkeypatch.setattr(bot, "build_options", lambda stderr=None: None)
 
     async def fake_query(*args, **kwargs):
         yield message
@@ -59,3 +59,28 @@ def test_run_agent_extracts_usage_from_object(monkeypatch):
     assert res.input_tokens == 3
     assert res.output_tokens == 4
     assert res.cost_usd == 0.05
+
+
+def test_run_agent_includes_claude_stderr_on_failure(monkeypatch):
+    monkeypatch.setattr(bot, "build_options", bot.build_options)
+
+    async def fake_stream(options):
+        options.stderr("API Error: credit balance is too low\n")
+        raise RuntimeError("Claude Code returned an error result: success")
+        yield  # pragma: no cover
+
+    def fake_query(*, prompt, options):
+        return fake_stream(options)
+
+    monkeypatch.setattr(bot, "query", fake_query)
+
+    try:
+        asyncio.run(bot.run_agent("/today"))
+    except RuntimeError as exc:
+        message = str(exc)
+    else:
+        raise AssertionError("run_agent should have raised")
+
+    assert "Claude Code returned an error result: success" in message
+    assert "Claude stderr:" in message
+    assert "credit balance is too low" in message

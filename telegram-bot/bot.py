@@ -74,7 +74,17 @@ def _npx_stdio_server(package: str, env: dict) -> dict:
     return {"type": "stdio", "command": command, "args": args, "env": env}
 
 
-def build_options() -> ClaudeAgentOptions:
+def _format_agent_error(exc: Exception, stderr_chunks: list[str]) -> str:
+    message = str(exc)
+    stderr_text = "".join(stderr_chunks).strip()
+    if not stderr_text:
+        return message
+
+    tail = stderr_text[-2000:]
+    return f"{message}\n\nClaude stderr:\n{tail}"
+
+
+def build_options(stderr=None) -> ClaudeAgentOptions:
     """Options that make the headless agent behave like your Claude Code project."""
     # MCP servers declared *programmatically* are trusted in a non-interactive run
     # (project .mcp.json servers get silently skipped here).
@@ -96,8 +106,6 @@ def build_options() -> ClaudeAgentOptions:
             "@cocal/google-calendar-mcp", gcal_env
         )
 
-    print(f"mcpServers {mcp_servers}")
-    logger.info("mcpServers: %s", str(mcp_servers))
     return ClaudeAgentOptions(
         cwd=PROJECT_DIR,
         # Load CLAUDE.md, .claude/commands skills, and any hosted connectors from your
@@ -115,6 +123,7 @@ def build_options() -> ClaudeAgentOptions:
         ],
         model=CLAUDE_MODEL,
         mcp_servers=mcp_servers,
+        stderr=stderr,
     )
 
 
@@ -151,15 +160,22 @@ async def run_agent(prompt: str) -> AgentResult:
     text_chunks: list[str] = []
     final_result: str | None = None
     input_tokens = output_tokens = cost_usd = None
+    stderr_chunks: list[str] = []
 
-    async for message in query(prompt=prompt, options=build_options()):
-        if isinstance(message, AssistantMessage):
-            for block in message.content:
-                if isinstance(block, TextBlock):
-                    text_chunks.append(block.text)
-        elif isinstance(message, ResultMessage):
-            final_result = getattr(message, "result", None)
-            input_tokens, output_tokens, cost_usd = _extract_usage(message)
+    try:
+        async for message in query(
+            prompt=prompt,
+            options=build_options(stderr=stderr_chunks.append),
+        ):
+            if isinstance(message, AssistantMessage):
+                for block in message.content:
+                    if isinstance(block, TextBlock):
+                        text_chunks.append(block.text)
+            elif isinstance(message, ResultMessage):
+                final_result = getattr(message, "result", None)
+                input_tokens, output_tokens, cost_usd = _extract_usage(message)
+    except Exception as exc:
+        raise RuntimeError(_format_agent_error(exc, stderr_chunks)) from exc
 
     reply = final_result or "\n".join(text_chunks).strip() or "(no response)"
     return AgentResult(reply, input_tokens, output_tokens, cost_usd)
@@ -172,16 +188,6 @@ _KNOWN_SKILLS = {"today", "week", "add"}
 
 
 def detect_skill(text: str) -> str:
-    """Bucket a message into a bounded, low-cardinality skill label.
-
-    A "/<skill>" token is detected anywhere in the message, not only at the
-    start, so "remind me to run /today" still maps to "today". Logic: split on
-    "/", then for each chunk that follows a slash, take its first word and check
-    it against the known skills; the first match wins.
-
-    Returns one of: today | week | add | chat | other. Bounded on purpose so it
-    is always safe to use as a metric dimension (see telemetry.py).
-    """
     stripped = text.strip()
     if "/" not in stripped:
         return "chat"
