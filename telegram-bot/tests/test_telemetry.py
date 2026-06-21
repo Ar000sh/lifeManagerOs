@@ -75,4 +75,6 @@ def test_init_enabled_creates_instruments(monkeypatch):
     assert telemetry._enabled is True
     assert telemetry._messages is not None
     assert telemetry._duration is not None
+    assert telemetry._tokens is not None
+    assert telemetry._cost is not None
     telemetry.shutdown_telemetry()
