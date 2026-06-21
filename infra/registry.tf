@@ -13,4 +13,10 @@ resource "azurerm_role_assignment" "acr_operator_push" {
   scope                = azurerm_container_registry.main.id
   role_definition_name = "AcrPush"
   principal_id         = data.azurerm_client_config.current.object_id
+
+  # Pin to whoever first applied (you) — see keyvault.tf kv_operator for why.
+  # Stops the CI managed identity from re-pointing this grant to itself each run.
+  lifecycle {
+    ignore_changes = [principal_id]
+  }
 }

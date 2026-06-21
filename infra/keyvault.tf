@@ -27,4 +27,11 @@ resource "azurerm_role_assignment" "kv_operator" {
   scope                = azurerm_key_vault.main.id
   role_definition_name = "Key Vault Secrets Officer"
   principal_id         = data.azurerm_client_config.current.object_id
+
+  # Pin to whoever first applied (you). Without this, a `terraform apply` run by a
+  # DIFFERENT principal (e.g. the CI managed identity) re-points this grant to itself
+  # and replaces it every run. The operator grant should stay with the human.
+  lifecycle {
+    ignore_changes = [principal_id]
+  }
 }

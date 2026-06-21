@@ -36,6 +36,13 @@ resource "azurerm_linux_virtual_machine" "main" {
     acr_login_server = azurerm_container_registry.main.login_server
     kv_name          = azurerm_key_vault.main.name
   }))
+
+  # Safety net: the SSH key is only used at first boot. Never let a plan REPLACE the
+  # running VM just because an SSH-key value differs (e.g. a CI variable that doesn't
+  # byte-match tfvars). Prevents an accidental, destructive VM rebuild from CI.
+  lifecycle {
+    ignore_changes = [admin_ssh_key]
+  }
 }
 
 # The VM identity may READ secrets from the vault (not write — least privilege).

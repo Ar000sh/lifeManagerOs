@@ -28,12 +28,11 @@ resource "azurerm_user_assigned_identity" "ci" {
 
 # Trust GitHub OIDC tokens from the main branch of this repo.
 resource "azurerm_federated_identity_credential" "ci" {
-  name                = "github-main"
-  resource_group_name = azurerm_resource_group.main.name
-  parent_id           = azurerm_user_assigned_identity.ci.id
-  audience            = ["api://AzureADTokenExchange"]
-  issuer              = "https://token.actions.githubusercontent.com"
-  subject             = "repo:${local.github_repo}:ref:refs/heads/main"
+  name      = "github-main"
+  parent_id = azurerm_user_assigned_identity.ci.id
+  audience  = ["api://AzureADTokenExchange"]
+  issuer    = "https://token.actions.githubusercontent.com"
+  subject   = "repo:${local.github_repo}:ref:refs/heads/main"
 }
 
 resource "azurerm_role_assignment" "ci_acr_push" {
@@ -74,12 +73,11 @@ resource "azurerm_user_assigned_identity" "rollout" {
 }
 
 resource "azurerm_federated_identity_credential" "rollout" {
-  name                = "github-env-production"
-  resource_group_name = azurerm_resource_group.main.name
-  parent_id           = azurerm_user_assigned_identity.rollout.id
-  audience            = ["api://AzureADTokenExchange"]
-  issuer              = "https://token.actions.githubusercontent.com"
-  subject             = "repo:${local.github_repo}:environment:production"
+  name      = "github-env-production"
+  parent_id = azurerm_user_assigned_identity.rollout.id
+  audience  = ["api://AzureADTokenExchange"]
+  issuer    = "https://token.actions.githubusercontent.com"
+  subject   = "repo:${local.github_repo}:environment:production"
 }
 
 resource "azurerm_role_assignment" "rollout_rg_contributor" {
