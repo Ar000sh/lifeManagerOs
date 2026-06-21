@@ -49,6 +49,7 @@ write_files:
         echo "ALLOWED_CHAT_ID=$(az keyvault secret show --vault-name ${kv_name} --name ALLOWED-CHAT-ID --query value -o tsv)"
         echo "NOTION_TOKEN=$(az keyvault secret show --vault-name ${kv_name} --name NOTION-TOKEN --query value -o tsv)"
         echo "CLAUDE_CODE_OAUTH_TOKEN=$(az keyvault secret show --vault-name ${kv_name} --name CLAUDE-CODE-OAUTH-TOKEN --query value -o tsv)"
+        echo "APPLICATIONINSIGHTS_CONNECTION_STRING=$(az keyvault secret show --vault-name ${kv_name} --name APPLICATIONINSIGHTS-CONNECTION-STRING --query value -o tsv)"
         echo "GOOGLE_OAUTH_CREDENTIALS=/app/secrets/gcp-oauth.keys.json"
         echo "GOOGLE_CALENDAR_MCP_TOKEN_PATH=/app/secrets/tokens"
       } > /opt/lifeos/.env
