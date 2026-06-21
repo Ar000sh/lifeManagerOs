@@ -16,6 +16,7 @@ import sys
 import logging
 from dataclasses import dataclass
 from pathlib import Path
+from time import perf_counter
 
 from dotenv import load_dotenv
 from telegram import Update
@@ -34,6 +35,8 @@ from claude_agent_sdk import (
     TextBlock,
     ResultMessage,
 )
+
+import telemetry
 
 # ---------------------------------------------------------------------------
 # Config
@@ -223,16 +226,23 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         logger.warning("Ignoring message from unauthorized chat id %s", chat_id)
         return
 
-    # --- run the agent ----------------------------------------------------
+    # --- run the agent (timed + measured) --------------------------------
+    skill = detect_skill(text)
     logger.info("Prompt: %s", text)
     await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
-    logger.info("message was send")
+
+    t0 = perf_counter()
+    result = None
     try:
-        reply = await run_agent(text)
-        logger.info("we got the responce needed")
+        result = await run_agent(text)
+        reply = result.reply
+        status = "ok"
     except Exception as exc:  # noqa: BLE001 - surface any error to the chat
         logger.exception("Agent run failed")
         reply = f"⚠️ Error running agent:\n{exc}"
+        status = "error"
+    finally:
+        telemetry.record_run(skill, status, perf_counter() - t0, usage=result)
 
     for chunk in split_for_telegram(reply):
         await update.message.reply_text(chunk)
@@ -248,12 +258,17 @@ def main() -> None:
     logger.info("Project dir: %s", PROJECT_DIR)
     logger.info("Allowed chat id: %s", ALLOWED_CHAT_ID or "(unset - setup mode)")
 
+    telemetry.init_telemetry()
+
     app = Application.builder().token(TELEGRAM_TOKEN).build()
     # filters.TEXT matches plain text AND slash-commands like /today, /week.
     app.add_handler(MessageHandler(filters.TEXT, handle_message))
 
     logger.info("Bot is running (long-polling). Press Ctrl+C to stop.")
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
+    try:
+        app.run_polling(allowed_updates=Update.ALL_TYPES)
+    finally:
+        telemetry.shutdown_telemetry()
 
 
 if __name__ == "__main__":
