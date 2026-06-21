@@ -14,6 +14,7 @@ Flow:
 import os
 import sys
 import logging
+from dataclasses import dataclass
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -114,10 +115,39 @@ def build_options() -> ClaudeAgentOptions:
     )
 
 
-async def run_agent(prompt: str) -> str:
-    """Run one agent turn and return the final text reply."""
+@dataclass
+class AgentResult:
+    """One agent turn's outcome: the reply text plus best-effort usage."""
+    reply: str
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    cost_usd: float | None = None
+
+
+def _extract_usage(message):
+    """Best-effort pull of token + cost telemetry off a ResultMessage.
+
+    Field names are read defensively; anything missing stays None so a change
+    in the SDK's shape can never break message handling. Confirm the real field
+    names against the installed claude_agent_sdk during implementation.
+    """
+    usage = getattr(message, "usage", None)
+    input_tokens = output_tokens = None
+    if isinstance(usage, dict):
+        input_tokens = usage.get("input_tokens")
+        output_tokens = usage.get("output_tokens")
+    elif usage is not None:
+        input_tokens = getattr(usage, "input_tokens", None)
+        output_tokens = getattr(usage, "output_tokens", None)
+    cost_usd = getattr(message, "total_cost_usd", None)
+    return input_tokens, output_tokens, cost_usd
+
+
+async def run_agent(prompt: str) -> AgentResult:
+    """Run one agent turn and return its reply + best-effort usage metrics."""
     text_chunks: list[str] = []
     final_result: str | None = None
+    input_tokens = output_tokens = cost_usd = None
 
     async for message in query(prompt=prompt, options=build_options()):
         if isinstance(message, AssistantMessage):
@@ -126,8 +156,10 @@ async def run_agent(prompt: str) -> str:
                     text_chunks.append(block.text)
         elif isinstance(message, ResultMessage):
             final_result = getattr(message, "result", None)
+            input_tokens, output_tokens, cost_usd = _extract_usage(message)
 
-    return final_result or "\n".join(text_chunks).strip() or "(no response)"
+    reply = final_result or "\n".join(text_chunks).strip() or "(no response)"
+    return AgentResult(reply, input_tokens, output_tokens, cost_usd)
 
 
 # ---------------------------------------------------------------------------
@@ -196,8 +228,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
     logger.info("message was send")
     try:
-        reply = await run_agent(text)
+        result = await run_agent(text)
         logger.info("we got the responce needed")
+        reply = result.reply
     except Exception as exc:  # noqa: BLE001 - surface any error to the chat
         logger.exception("Agent run failed")
         reply = f"⚠️ Error running agent:\n{exc}"
