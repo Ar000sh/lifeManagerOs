@@ -58,3 +58,21 @@ def test_record_run_swallows_instrument_errors(monkeypatch):
     telemetry._messages.add.side_effect = RuntimeError("boom")
     telemetry.record_run("today", "ok", 1.0, usage=None)  # must not raise
     telemetry._messages.add.assert_called_once()  # confirm we reached the throw point before swallowing
+
+
+def test_init_disabled_without_connection_string(monkeypatch):
+    monkeypatch.delenv("APPLICATIONINSIGHTS_CONNECTION_STRING", raising=False)
+    monkeypatch.setattr(telemetry, "_enabled", True)  # prove init flips it to False
+    telemetry.init_telemetry()
+    assert telemetry._enabled is False
+
+
+def test_init_enabled_creates_instruments(monkeypatch):
+    monkeypatch.setenv("APPLICATIONINSIGHTS_CONNECTION_STRING",
+                       "InstrumentationKey=00000000-0000-0000-0000-000000000000")
+    monkeypatch.setattr(telemetry, "_enabled", False)
+    telemetry.init_telemetry()
+    assert telemetry._enabled is True
+    assert telemetry._messages is not None
+    assert telemetry._duration is not None
+    telemetry.shutdown_telemetry()

@@ -14,6 +14,7 @@ Public interface:
     shutdown_telemetry()  - call once on clean shutdown (flushes)
 """
 import logging
+import os
 
 logger = logging.getLogger("lifeos-bot.telemetry")
 
@@ -24,6 +25,40 @@ _messages = None
 _duration = None
 _tokens = None
 _cost = None
+
+
+def init_telemetry():
+    """Wire the metrics-only OTel pipeline. Safe to call once at startup."""
+    global _enabled, _provider, _messages, _duration, _tokens, _cost
+
+    conn = os.environ.get("APPLICATIONINSIGHTS_CONNECTION_STRING", "").strip()
+    if not conn:
+        logger.info("telemetry disabled (no APPLICATIONINSIGHTS_CONNECTION_STRING)")
+        _enabled = False
+        return
+
+    try:
+        # Imported lazily so the module no-ops cleanly when the packages or the
+        # connection string are absent (local dev, tests).
+        from azure.monitor.opentelemetry.exporter import AzureMonitorMetricExporter
+        from opentelemetry.sdk.metrics import MeterProvider
+        from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+
+        exporter = AzureMonitorMetricExporter(connection_string=conn)
+        reader = PeriodicExportingMetricReader(exporter, export_interval_millis=60_000)
+        _provider = MeterProvider(metric_readers=[reader])
+        meter = _provider.get_meter("lifeos-bot")
+
+        _messages = meter.create_counter("bot.messages.handled")
+        _duration = meter.create_histogram("bot.agent.run.duration", unit="s")
+        _tokens = meter.create_histogram("bot.claude.tokens")
+        _cost = meter.create_histogram("bot.claude.cost_usd", unit="USD")
+
+        _enabled = True
+        logger.info("telemetry enabled (App Insights metrics)")
+    except Exception:  # noqa: BLE001 - telemetry must never break startup
+        logger.exception("telemetry setup failed; continuing without metrics")
+        _enabled = False
 
 
 def record_run(skill, status, duration_s, usage=None):
