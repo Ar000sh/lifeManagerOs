@@ -1,5 +1,7 @@
 claude-agent-sdk>=0.1.0
 python-telegram-bot>=21.0
 python-dotenv>=1.0
-azure-monitor-opentelemetry-exporter>=1.0
+# This exporter has no stable release yet — only pre-release (beta) versions exist,
+# so a ">=1.0" floor matches nothing on a clean index. Pin the exact tested beta.
+azure-monitor-opentelemetry-exporter==1.0.0b53
 opentelemetry-sdk>=1.20
