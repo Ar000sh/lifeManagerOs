@@ -22,3 +22,28 @@ output "app_insights_connection_string" {
   value       = azurerm_application_insights.main.connection_string
   sensitive   = true # contains an instrumentation key; never print in plain logs.
 }
+
+output "ci_client_id" {
+  description = "Client ID of the CI managed identity → GitHub Variable AZURE_CI_CLIENT_ID."
+  value       = azurerm_user_assigned_identity.ci.client_id
+}
+
+output "rollout_client_id" {
+  description = "Client ID of the rollout managed identity → GitHub Variable AZURE_ROLLOUT_CLIENT_ID."
+  value       = azurerm_user_assigned_identity.rollout.client_id
+}
+
+output "tenant_id" {
+  description = "Entra tenant ID → GitHub Variable AZURE_TENANT_ID."
+  value       = data.azurerm_client_config.current.tenant_id
+}
+
+output "acr_name" {
+  description = "ACR registry name (no domain) → GitHub Variable ACR_NAME."
+  value       = azurerm_container_registry.main.name
+}
+
+output "subscription_id" {
+  description = "Subscription ID → GitHub Variable AZURE_SUBSCRIPTION_ID."
+  value       = var.subscription_id
+}

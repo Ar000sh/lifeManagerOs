@@ -1,0 +1,127 @@
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  id-token: write   # required for OIDC
+  contents: read
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: |
+          pip install -r telegram-bot/requirements.txt
+          pip install -r telegram-bot/requirements-dev.txt
+
+      - name: Lint
+        run: ruff check telegram-bot
+
+      - name: Test
+        working-directory: telegram-bot
+        run: pytest -q
+
+      - name: Azure login (CI identity)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CI_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build & push image
+        run: |
+          set -euo pipefail
+          az acr login --name "${{ vars.ACR_NAME }}"
+          IMAGE="${{ vars.ACR_NAME }}.azurecr.io/lifeos-bot"
+          SHA="$(git rev-parse --short HEAD)"
+          docker build -t "$IMAGE:latest" -t "$IMAGE:$SHA" -t "$IMAGE:b${{ github.run_number }}" .
+          docker push --all-tags "$IMAGE"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform plan
+        working-directory: infra
+        env:
+          ARM_USE_OIDC: "true"
+          ARM_USE_AZUREAD: "true"   # reach state blob via AAD, not a storage key
+          ARM_CLIENT_ID: ${{ vars.AZURE_CI_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          TF_VAR_subscription_id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          TF_VAR_operator_ip: ${{ vars.OPERATOR_IP }}
+          TF_VAR_ssh_public_key: ${{ vars.SSH_PUBLIC_KEY }}
+          TF_VAR_alert_email: ${{ vars.ALERT_EMAIL }}
+        run: |
+          terraform init
+          terraform plan -out=tfplan
+          terraform show -no-color tfplan > tfplan.txt
+
+      - name: Upload plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan
+          path: |
+            infra/tfplan
+            infra/tfplan.txt
+
+  rollout:
+    needs: ci
+    runs-on: ubuntu-latest
+    environment: production   # <-- the manual approval button
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download plan
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan
+          path: infra
+
+      - name: Azure login (rollout identity)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_ROLLOUT_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform apply (the reviewed plan)
+        working-directory: infra
+        env:
+          ARM_USE_OIDC: "true"
+          ARM_USE_AZUREAD: "true"
+          ARM_CLIENT_ID: ${{ vars.AZURE_ROLLOUT_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          TF_VAR_subscription_id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          TF_VAR_operator_ip: ${{ vars.OPERATOR_IP }}
+          TF_VAR_ssh_public_key: ${{ vars.SSH_PUBLIC_KEY }}
+          TF_VAR_alert_email: ${{ vars.ALERT_EMAIL }}
+        run: |
+          terraform init
+          terraform apply -auto-approve tfplan
+
+      - name: Deploy to VM (pull + restart)
+        run: |
+          az vm run-command invoke \
+            -g "${{ vars.RESOURCE_GROUP }}" \
+            -n "${{ vars.VM_NAME }}" \
+            --command-id RunShellScript \
+            --scripts "az login --identity && az acr login --name ${{ vars.ACR_NAME }} && docker compose -f /opt/lifeos/docker-compose.yml pull && docker compose -f /opt/lifeos/docker-compose.yml up -d"

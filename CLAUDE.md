@@ -50,9 +50,12 @@ be accompanied by plain-language documentation.
 - `infra/doc/overview.md` is the big-picture guide (Terraform workflow, state, file
   layout, progress). Keep its progress table current as tasks complete.
 
-**Working style for infra:** explain before acting; do not run `terraform apply` (or
-other state-changing commands) on Aroosh's behalf — prepare the files and commands and
-let him run the apply himself so he learns by doing.
+**Working style for infra:** explain before acting. Ongoing infra changes ship through
+the gated CI/CD pipeline (Plan 2): a push to `main` runs `terraform plan`, and Aroosh
+approves the `production` environment to apply. Identity/bootstrap changes
+(`infra/cicd.tf`, the state backend) are still applied **locally** by Aroosh, never by
+CI. Claude prepares files + commands and does not run `terraform apply` (or other
+state-changing commands) on Aroosh's behalf locally.
 
 ## Available Commands
 

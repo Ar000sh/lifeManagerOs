@@ -1,0 +1,7 @@
+# Minimal gate: real errors (pyflakes F, syntax E9) without failing on style.
+line-length = 120
+
+[lint]
+select = ["E", "F", "W"]
+ignore = ["E501"]  # long lines are fine for this project
+exclude = [".venv"]
