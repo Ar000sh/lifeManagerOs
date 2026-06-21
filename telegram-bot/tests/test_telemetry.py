@@ -1,7 +1,7 @@
 import sys
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, call
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import telemetry  # noqa: E402
@@ -30,6 +30,10 @@ def test_record_run_dispatch_with_full_usage(monkeypatch):
     telemetry._messages.add.assert_called_once_with(1, {"skill": "today", "status": "ok"})
     telemetry._duration.record.assert_called_once_with(2.5, {"skill": "today", "status": "ok"})
     assert telemetry._tokens.record.call_count == 2
+    telemetry._tokens.record.assert_has_calls([
+        call(10, {"skill": "today", "status": "ok", "direction": "input"}),
+        call(20, {"skill": "today", "status": "ok", "direction": "output"}),
+    ], any_order=False)
     telemetry._cost.record.assert_called_once_with(0.01, {"skill": "today", "status": "ok"})
 
 
@@ -53,3 +57,4 @@ def test_record_run_swallows_instrument_errors(monkeypatch):
     _enable_with_mocks(monkeypatch)
     telemetry._messages.add.side_effect = RuntimeError("boom")
     telemetry.record_run("today", "ok", 1.0, usage=None)  # must not raise
+    telemetry._messages.add.assert_called_once()  # confirm we reached the throw point before swallowing
