@@ -84,3 +84,23 @@ def test_run_agent_includes_claude_stderr_on_failure(monkeypatch):
     assert "Claude Code returned an error result: success" in message
     assert "Claude stderr:" in message
     assert "credit balance is too low" in message
+
+
+def test_run_agent_explains_misleading_success_error_without_stderr(monkeypatch):
+    monkeypatch.setattr(bot, "build_options", bot.build_options)
+
+    async def fake_stream(options):
+        raise RuntimeError("Claude Code returned an error result: success")
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(bot, "query", lambda *, prompt, options: fake_stream(options))
+
+    try:
+        asyncio.run(bot.run_agent("/today"))
+    except RuntimeError as exc:
+        message = str(exc)
+    else:
+        raise AssertionError("run_agent should have raised")
+
+    assert "Claude Code returned an error result: success" in message
+    assert "did not expose a detailed error" in message
