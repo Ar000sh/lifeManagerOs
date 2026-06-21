@@ -228,9 +228,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
     logger.info("message was send")
     try:
-        result = await run_agent(text)
+        reply = await run_agent(text)
         logger.info("we got the responce needed")
-        reply = result.reply
     except Exception as exc:  # noqa: BLE001 - surface any error to the chat
         logger.exception("Agent run failed")
         reply = f"⚠️ Error running agent:\n{exc}"
