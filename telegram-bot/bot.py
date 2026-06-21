@@ -233,6 +233,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     t0 = perf_counter()
     result = None
+    status = "error"  # safe default; overwritten to "ok" on success
     try:
         result = await run_agent(text)
         reply = result.reply

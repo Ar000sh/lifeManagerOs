@@ -43,6 +43,7 @@ def test_authorized_chat_runs_agent_replies_and_records(monkeypatch):
     record.assert_called_once()
     assert record.call_args.args[0] == "today"   # skill
     assert record.call_args.args[1] == "ok"      # status
+    assert record.call_args.kwargs["usage"] == bot.AgentResult(reply="hi back")
 
 
 def test_error_path_records_error_and_still_replies(monkeypatch):
@@ -59,3 +60,4 @@ def test_error_path_records_error_and_still_replies(monkeypatch):
     record.assert_called_once()
     assert record.call_args.args[0] == "week"    # skill
     assert record.call_args.args[1] == "error"   # status
+    assert record.call_args.kwargs["usage"] is None
