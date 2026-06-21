@@ -1,6 +1,7 @@
 import asyncio
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import bot  # noqa: E402
@@ -47,3 +48,14 @@ def test_run_agent_handles_missing_usage(monkeypatch):
     assert res.input_tokens is None
     assert res.output_tokens is None
     assert res.cost_usd is None
+
+
+def test_run_agent_extracts_usage_from_object(monkeypatch):
+    msg = FakeResultMessage("complete", usage=SimpleNamespace(input_tokens=3, output_tokens=4),
+                            total_cost_usd=0.05)
+    _patch_stream(monkeypatch, msg)
+    res = asyncio.run(bot.run_agent("/add"))
+    assert res.reply == "complete"
+    assert res.input_tokens == 3
+    assert res.output_tokens == 4
+    assert res.cost_usd == 0.05
