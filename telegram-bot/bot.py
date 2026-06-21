@@ -80,6 +80,7 @@ def _format_agent_error(exc: Exception, stderr_chunks: list[str]) -> str:
     if not stderr_text:
         if message == "Claude Code returned an error result: success":
             return (
+                f"{message}\n\n"
                 "Claude Code failed but the SDK did not expose a detailed error. "
                 "Could possibly be due to Token Limits please Check Claude account limits/credits"
             )
