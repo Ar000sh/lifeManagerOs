@@ -27,6 +27,7 @@ COPY context /app/context
 COPY telegram-bot/bot.py ./bot.py
 COPY telegram-bot/agent_runner.py ./agent_runner.py
 COPY telegram-bot/routing.py ./routing.py
+COPY telegram-bot/sessions.py ./sessions.py
 COPY telegram-bot/telemetry.py ./telemetry.py
 
 # --- Run as a non-root user ---

@@ -11,6 +11,7 @@ RUNTIME_MODULES = [
     "telemetry.py",
     "agent_runner.py",
     "routing.py",
+    "sessions.py",
 ]
 
 
