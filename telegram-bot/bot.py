@@ -27,6 +27,7 @@ from telegram.ext import (
 
 from agent_runner import AgentResult, run_agent
 from routing import classify_message, detect_skill
+from sessions import SessionManager, compose_command_conversation_prompt
 
 import telemetry
 
@@ -46,6 +47,9 @@ logging.basicConfig(
     level=logging.INFO,
 )
 logger = logging.getLogger("lifeos-bot")
+
+# One process-wide registry of live conversations, keyed by Telegram chat id.
+SESSION_MANAGER = SessionManager()
 
 
 # ---------------------------------------------------------------------------
@@ -92,27 +96,68 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         logger.warning("Ignoring message from unauthorized chat id %s", chat_id)
         return
 
-    # --- run the agent (timed + measured) --------------------------------
-    # Classify now so telemetry uses the route's skill label. Behaviour is still
-    # one-shot for every message; sessions get wired in a later task.
     route = classify_message(text)
-    skill = route.skill
     logger.info("Prompt: %s", text)
+
+    # --- session control messages (no agent run, no telemetry timing) ----
+    if route.kind == "stop":
+        await SESSION_MANAGER.stop(chat_id)
+        await update.message.reply_text("Conversation stopped.")
+        return
+
+    if route.kind == "chat" and route.followup_text is None:
+        # Bare /chat just opens a 30-min session; nothing is sent to Claude yet.
+        SESSION_MANAGER.get_or_create(chat_id, "chat")
+        await update.message.reply_text("Chat mode started.")
+        return
+
+    # --- run the agent (timed + measured) --------------------------------
     await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
 
     t0 = perf_counter()
     result = None
     status = "error"  # safe default; overwritten to "ok" on success
+    session_mode = "standalone"
+    session_event = None
     try:
-        result = await run_agent(text)
-        reply = result.reply
+        if route.kind == "standalone_command":
+            # Bare /today, /week, /add: one-shot, never touches a live session.
+            result = await run_agent(route.command_text or text)
+            reply = result.reply
+            session_mode = "standalone"
+        elif route.kind == "command_conversation":
+            # "/today help me ...": run the command one-shot, then hand its
+            # result + the follow-up to the implicit live session as context.
+            command_result = await run_agent(route.command_text or text)
+            prompt = compose_command_conversation_prompt(
+                route.command_text or text,
+                command_result.reply,
+                route.followup_text or "",
+            )
+            result, session_event = await SESSION_MANAGER.ask(chat_id, prompt, mode="implicit")
+            reply = result.reply
+            session_mode = "implicit"
+        else:
+            # Plain text -> implicit session; /chat <text> -> chat session.
+            mode = "chat" if route.kind == "chat" else "implicit"
+            prompt = route.followup_text or text
+            result, session_event = await SESSION_MANAGER.ask(chat_id, prompt, mode=mode)
+            reply = result.reply
+            session_mode = mode
         status = "ok"
     except Exception as exc:  # noqa: BLE001 - surface any error to the chat
         logger.exception("Agent run failed")
         reply = f"⚠️ Error running agent:\n{exc}"
         status = "error"
     finally:
-        telemetry.record_run(skill, status, perf_counter() - t0, usage=result)
+        telemetry.record_run(
+            route.skill,
+            status,
+            perf_counter() - t0,
+            usage=result,
+            session_mode=session_mode,
+            session_event=session_event,
+        )
 
     for chunk in split_for_telegram(reply):
         await update.message.reply_text(chunk)
