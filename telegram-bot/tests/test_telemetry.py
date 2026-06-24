@@ -60,32 +60,6 @@ def test_record_run_swallows_instrument_errors(monkeypatch):
     telemetry._messages.add.assert_called_once()  # confirm we reached the throw point before swallowing
 
 
-def test_record_run_includes_session_attributes(monkeypatch):
-    monkeypatch.setattr(telemetry, "_enabled", True)
-    monkeypatch.setattr(telemetry, "_messages", MagicMock())
-    monkeypatch.setattr(telemetry, "_duration", MagicMock())
-    monkeypatch.setattr(telemetry, "_tokens", MagicMock())
-    monkeypatch.setattr(telemetry, "_cost", MagicMock())
-
-    telemetry.record_run(
-        "chat",
-        "ok",
-        1.5,
-        usage=None,
-        session_mode="implicit",
-        session_event="created",
-    )
-
-    expected_attrs = {
-        "skill": "chat",
-        "status": "ok",
-        "session_mode": "implicit",
-        "session_event": "created",
-    }
-    telemetry._messages.add.assert_called_once_with(1, expected_attrs)
-    telemetry._duration.record.assert_called_once_with(1.5, expected_attrs)
-
-
 def test_init_disabled_without_connection_string(monkeypatch):
     monkeypatch.delenv("APPLICATIONINSIGHTS_CONNECTION_STRING", raising=False)
     monkeypatch.setattr(telemetry, "_enabled", True)  # prove init flips it to False

@@ -70,23 +70,15 @@ def init_telemetry():
         _enabled = False
 
 
-def record_run(skill, status, duration_s, usage=None, session_mode=None, session_event=None):
+def record_run(skill, status, duration_s, usage=None):
     """Record the metrics for one handled message. Never raises.
 
     Silent no-op when telemetry is disabled (the normal local/pre-rollout state).
-
-    session_mode ("standalone"/"implicit"/"chat") and session_event
-    ("created"/"reused"/"upgraded") are optional so older 4-arg calls keep
-    working; they're only attached as metric dimensions when provided.
     """
     if not _enabled:
         return
     try:
         attrs = {"skill": skill, "status": status}
-        if session_mode:
-            attrs["session_mode"] = session_mode
-        if session_event:
-            attrs["session_event"] = session_event
         _messages.add(1, attrs)
         _duration.record(duration_s, attrs)
         if usage is not None:
