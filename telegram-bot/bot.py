@@ -12,7 +12,6 @@ Flow:
 """
 
 import os
-import asyncio
 import logging
 from time import perf_counter
 
@@ -164,52 +163,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text(chunk)
 
 
-async def cleanup_sessions_loop(interval_seconds: int = 60) -> None:
-    """Background sweep: reap live sessions that have gone idle past their TTL.
-
-    Runs forever until cancelled (on shutdown). Each pass sleeps, then asks the
-    SessionManager to disconnect+drop any expired sessions so we don't leak open
-    Claude connections for users who walked away.
-    """
-    while True:
-        await asyncio.sleep(interval_seconds)
-        expired = await SESSION_MANAGER.expire_idle()
-        for chat_id in expired:
-            logger.info("Expired idle conversation session for chat id %s", chat_id)
-
-
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
-async def _post_init(app) -> None:
-    # Launch the idle-cleanup sweep once the event loop is running; stash the
-    # task handle so we can cancel it cleanly at shutdown.
-    app.bot_data["session_cleanup_task"] = asyncio.create_task(cleanup_sessions_loop())
-
-
-async def _post_shutdown(app) -> None:
-    task = app.bot_data.get("session_cleanup_task")
-    if task:
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
-
-
 def main() -> None:
     if not TELEGRAM_TOKEN:
         raise SystemExit("TELEGRAM_BOT_TOKEN is missing.")
 
     telemetry.init_telemetry()
 
-    app = (
-        Application.builder()
-        .token(TELEGRAM_TOKEN)
-        .post_init(_post_init)
-        .post_shutdown(_post_shutdown)
-        .build()
-    )
+    app = Application.builder().token(TELEGRAM_TOKEN).build()
     # filters.TEXT matches plain text AND slash-commands like /today, /week.
     app.add_handler(MessageHandler(filters.TEXT, handle_message))
 
