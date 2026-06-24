@@ -26,7 +26,6 @@ from telegram.ext import (
 )
 
 from agent_runner import AgentResult, run_agent
-from routing import classify_message, detect_skill
 
 import telemetry
 
@@ -51,6 +50,22 @@ logger = logging.getLogger("lifeos-bot")
 # ---------------------------------------------------------------------------
 # Telegram handlers
 # ---------------------------------------------------------------------------
+_KNOWN_SKILLS = {"today", "week", "add"}
+
+
+def detect_skill(text: str) -> str:
+    stripped = text.strip()
+    if "/" not in stripped:
+        return "chat"
+    # Skip [0]: the text before the first "/" wasn't preceded by a slash, so its
+    # first word can't be a command. Every later chunk starts right after a "/".
+    for chunk in stripped.split("/")[1:]:
+        words = chunk.split()
+        if words and words[0].lower() in _KNOWN_SKILLS:
+            return words[0].lower()
+    return "other"
+
+
 def split_for_telegram(text: str) -> list[str]:
     """Telegram caps messages at 4096 chars; split on line boundaries."""
     if len(text) <= TELEGRAM_MAX:
@@ -93,10 +108,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
 
     # --- run the agent (timed + measured) --------------------------------
-    # Classify now so telemetry uses the route's skill label. Behaviour is still
-    # one-shot for every message; sessions get wired in a later task.
-    route = classify_message(text)
-    skill = route.skill
+    skill = detect_skill(text)
     logger.info("Prompt: %s", text)
     await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
 
