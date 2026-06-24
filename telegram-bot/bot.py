@@ -118,15 +118,20 @@ def build_options(stderr=None) -> ClaudeAgentOptions:
         # Claude login (user settings).
         setting_sources=["user", "project", "local"],
         system_prompt={"type": "preset", "preset": "claude_code"},
-        # Read-only filesystem: the bot organizes via the Notion/Calendar MCP
-        tools=["Read", "Glob", "Grep"],
-        # Default-deny instead of auto-approve-everything
+        # Default-deny: with permission_mode="dontAsk", any tool NOT pre-approved in
+        # allowed_tools below is denied (headless, so this denies instead of prompting).
         permission_mode="dontAsk",
         allowed_tools=[
             "Read", "Glob", "Grep",
             "mcp__notion-api",       # all Notion MCP tools (read + create/update)
             "mcp__google-calendar",  # all Google Calendar MCP tools
         ],
+        # Read-only filesystem: remove the write/exec built-ins from the agent's
+        # context. Do NOT use `tools=[...]` to whitelist here — that field sets the
+        # *available* tool set and silently EXCLUDES the MCP servers, which left the
+        # bot with no Notion/Calendar access in production (SDK ClaudeAgentOptions:
+        # `tools` = availability, `allowed_tools` = auto-approval).
+        disallowed_tools=["Bash", "Write", "Edit", "MultiEdit", "NotebookEdit"],
         model=CLAUDE_MODEL,
         mcp_servers=mcp_servers,
         stderr=stderr,
