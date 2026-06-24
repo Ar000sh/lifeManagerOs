@@ -60,31 +60,6 @@ Stop the bot with **Ctrl+C**.
 
 ---
 
-## Conversations & commands
-
-The bot keeps a **live, multi-turn conversation** per chat, so it remembers
-what you just said instead of treating every message in isolation:
-
-- **Plain text** (e.g. `what should I do today?`) starts an **implicit session**.
-  Follow-ups within **10 minutes** keep the context — ask `and what about
-  tomorrow?` and it knows what "tomorrow" refers to.
-- **`/chat`** starts a longer **chat session** (context kept for **30 minutes**
-  of inactivity). `/chat` on its own replies `Chat mode started.`; `/chat <text>`
-  also sends your first message.
-- **`/stop`** ends the current conversation immediately — it interrupts any work
-  in progress, closes the session, and replies `Conversation stopped.`
-- **Standalone commands** — `/today`, `/week`, `/add` on their own — run
-  **one-shot** (a fresh, self-contained briefing) and do **not** touch the live
-  conversation.
-- **Command + follow-up** — e.g. `/today help me prioritize` — runs `/today`
-  once, then feeds its result plus your follow-up into the conversation so you
-  can discuss it.
-
-Idle sessions are swept automatically in the background once they pass their
-timeout, so abandoned chats don't keep a Claude connection open.
-
----
-
 ## ⚠️ Important: Notion & Calendar won't work yet
 
 The pipeline (Telegram ↔ Claude ↔ your skills) works immediately, but **live Notion /
@@ -104,31 +79,21 @@ Ping me and I'll wire that up.
 
 ---
 
-## How it works (module layout)
+## How it works (bot.py)
 
-The bot is split into focused modules:
-
-- **`agent_runner.py`** — everything about talking to Claude. `build_options()`
-  points the agent at your project, loads `CLAUDE.md` + `.claude/commands`, uses
-  the Claude Code system prompt, and restricts tools (`permission_mode="dontAsk"`
-  + an explicit `allowed_tools` list). `run_agent()` runs one **one-shot** turn;
-  `LiveAgentClient` wraps a persistent `ClaudeSDKClient` for **multi-turn** chat.
-- **`routing.py`** — `classify_message()` decides what a message is (stop / chat /
-  standalone command / command+follow-up / plain conversation).
-- **`sessions.py`** — `SessionManager` owns the live conversations per chat ID,
-  their 10-/30-minute timeouts, and idle expiry.
-- **`bot.py`** — the Telegram glue: **locks the bot to your chat ID**, shows
-  "typing…", dispatches each message via the route, records telemetry, and splits
-  long replies under Telegram's 4096-char limit.
+- `build_options()` — points the agent at your project, loads `CLAUDE.md` + `.claude/commands`,
+  uses the Claude Code system prompt, and auto-approves tools (`bypassPermissions`).
+- `run_agent()` — runs one agent turn, collects the final text.
+- `handle_message()` — **locks the bot to your chat ID**, shows "typing…", runs the agent,
+  splits long replies under Telegram's 4096-char limit.
 
 ---
 
 ## Security notes
 
 - The bot **only responds to `ALLOWED_CHAT_ID`** — others are ignored.
-- Tools run under `permission_mode="dontAsk"` with an explicit `allowed_tools`
-  list (read-only filesystem + the Notion/Calendar MCP servers), so the agent
-  can't run arbitrary tools even though only you can trigger it.
+- `bypassPermissions` auto-runs tools; that's fine because only you can trigger it. If you
+  ever expose this more widely, switch to an explicit `allowed_tools` list instead.
 - `.env` is git-ignored — never commit your token.
 
 ---
