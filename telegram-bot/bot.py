@@ -1,16 +1,3 @@
-"""
-Life OS — Telegram bot starter.
-
-Bridges Telegram <-> your Claude Code skills (/today, /week, /add, ...) using the
-Claude Agent SDK. Runs headless on your *subscription* (no ANTHROPIC_API_KEY).
-
-Local testing uses long-polling, so you do NOT need a public URL or webhook.
-
-Flow:
-    you message the bot  ->  this server  ->  Claude Agent SDK runs the skill
-                          <-  reply text   <-  (loads CLAUDE.md + .claude/commands)
-"""
-
 import os
 import asyncio
 import logging
@@ -99,6 +86,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     route = classify_message(text)
     logger.info("Prompt: %s", text)
+    logger.info("Route %s", route)
 
     # --- session control messages (no agent run, no telemetry timing) ----
     if route.kind == "stop":
@@ -164,18 +152,19 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text(chunk)
 
 
-async def cleanup_sessions_loop(interval_seconds: int = 60) -> None:
-    """Background sweep: reap live sessions that have gone idle past their TTL.
-
-    Runs forever until cancelled (on shutdown). Each pass sleeps, then asks the
-    SessionManager to disconnect+drop any expired sessions so we don't leak open
-    Claude connections for users who walked away.
-    """
+async def cleanup_sessions_loop(bot, interval_seconds: int = 60) -> None:
     while True:
         await asyncio.sleep(interval_seconds)
         expired = await SESSION_MANAGER.expire_idle()
         for chat_id in expired:
             logger.info("Expired idle conversation session for chat id %s", chat_id)
+            try:
+                await bot.send_message(
+                    chat_id=chat_id,
+                    text="💤 Conversation timed out after inactivity.",
+                )
+            except Exception:  # noqa: BLE001 - never let one bad send kill the loop
+                logger.exception("Failed to notify chat %s of idle timeout", chat_id)
 
 
 # ---------------------------------------------------------------------------
@@ -184,7 +173,7 @@ async def cleanup_sessions_loop(interval_seconds: int = 60) -> None:
 async def _post_init(app) -> None:
     # Launch the idle-cleanup sweep once the event loop is running; stash the
     # task handle so we can cancel it cleanly at shutdown.
-    app.bot_data["session_cleanup_task"] = asyncio.create_task(cleanup_sessions_loop())
+    app.bot_data["session_cleanup_task"] = asyncio.create_task(cleanup_sessions_loop(app.bot))
 
 
 async def _post_shutdown(app) -> None:

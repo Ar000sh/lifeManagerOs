@@ -16,7 +16,7 @@ import asyncio
 from dataclasses import dataclass, field
 from time import monotonic
 from typing import Callable, Literal
-
+import logging
 from agent_runner import AgentResult, LiveAgentClient
 
 SessionMode = Literal["implicit", "chat"]
@@ -24,7 +24,11 @@ SessionMode = Literal["implicit", "chat"]
 IMPLICIT_TIMEOUT_SECONDS = 10 * 60
 CHAT_TIMEOUT_SECONDS = 30 * 60
 
-
+logging.basicConfig(
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+    level=logging.INFO,
+)
+logger = logging.getLogger("lifeos-bot")
 def timeout_for_mode(mode: SessionMode) -> int:
     return CHAT_TIMEOUT_SECONDS if mode == "chat" else IMPLICIT_TIMEOUT_SECONDS
 
@@ -71,6 +75,8 @@ class ConversationSession:
 
     def is_idle_expired(self, now: float) -> bool:
         # An in-flight turn is never reaped, even if it runs past the timeout.
+        passed_time = now - self.last_activity
+        logger.info("current sessions timeout %s and passed time %s", self.timeout_seconds, passed_time)
         return not self.active and (now - self.last_activity) > self.timeout_seconds
 
     async def ask(self, prompt: str) -> AgentResult:
@@ -108,11 +114,15 @@ class SessionManager:
                 chat_id=chat_id, client=self.client_factory(), mode=mode, now=self.now
             )
             self.sessions[chat_id] = session
+            logger.info("created a new session")
             return session, "created"
         if mode == "chat" and session.mode != "chat":
             session.upgrade_to_chat()
+            logger.info("update to a chat session")
+
             return session, "upgraded"
         session.touch()
+        logger.info("reuse current session")
         return session, "reused"
 
     async def ask(self, chat_id: int, prompt: str, mode: SessionMode = "implicit") -> tuple[AgentResult, str]:

@@ -110,7 +110,6 @@ def build_options(stderr=None) -> ClaudeAgentOptions:
 
 @dataclass
 class AgentResult:
-    """One agent turn's outcome: the reply text plus best-effort usage."""
     reply: str
     input_tokens: int | None = None
     output_tokens: int | None = None
@@ -118,12 +117,6 @@ class AgentResult:
 
 
 def _extract_usage(message):
-    """Best-effort pull of token + cost telemetry off a ResultMessage.
-
-    Field names are read defensively; anything missing stays None so a change
-    in the SDK's shape can never break message handling. Confirm the real field
-    names against the installed claude_agent_sdk during implementation.
-    """
     usage = getattr(message, "usage", None)
     input_tokens = output_tokens = None
     if isinstance(usage, dict):
