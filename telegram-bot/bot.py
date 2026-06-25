@@ -13,8 +13,8 @@ from telegram.ext import (
     filters,
 )
 
-from agent_runner import AgentResult, run_agent
-from routing import classify_message, detect_skill
+from agent_runner import run_agent
+from routing import classify_message
 from sessions import SessionManager, compose_command_conversation_prompt
 
 import telemetry

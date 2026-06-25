@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import bot  # noqa: E402
+from agent_runner import AgentResult  # noqa: E402
 
 
 def _update_context(chat_id, text="/today"):
@@ -32,7 +33,7 @@ def test_unauthorized_chat_is_ignored(monkeypatch):
 
 def test_authorized_chat_runs_agent_replies_and_records(monkeypatch):
     monkeypatch.setattr(bot, "ALLOWED_CHAT_ID", 111)
-    run_agent = AsyncMock(return_value=bot.AgentResult(reply="hi back"))
+    run_agent = AsyncMock(return_value=AgentResult(reply="hi back"))
     monkeypatch.setattr(bot, "run_agent", run_agent)
     record = MagicMock()
     monkeypatch.setattr(bot.telemetry, "record_run", record)
@@ -43,7 +44,7 @@ def test_authorized_chat_runs_agent_replies_and_records(monkeypatch):
     record.assert_called_once()
     assert record.call_args.args[0] == "today"   # skill
     assert record.call_args.args[1] == "ok"      # status
-    assert record.call_args.kwargs["usage"] == bot.AgentResult(reply="hi back")
+    assert record.call_args.kwargs["usage"] == AgentResult(reply="hi back")
 
 
 def test_error_path_records_error_and_still_replies(monkeypatch):
