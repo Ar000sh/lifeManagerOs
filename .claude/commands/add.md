@@ -23,7 +23,7 @@ If a business name is given but not yet in the map, resolve-on-miss (enumerate u
 ## Creating in Notion
 Use `notion-create-pages` into the resolved DB. Set columns via the destination role's
 `db_role_schemas` (never assume column names). Defaults: set `title`; set `status` to a
-sensible start value; set `priority` = Medium if not given; set `due_date` if mentioned.
+sensible start value; set `priority` = Medium if not given; set `due_date` if mentioned — set each only when the destination role's `db_role_schemas` defines it.
 For a university task tied to a module: resolve `modules`, search the module page, set the
 `module` relation. For exams set both `due_date` (prep-by) and `exam_date` if known.
 

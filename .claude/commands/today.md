@@ -10,8 +10,9 @@ queries over semantic search.
    Show time + title.
 3. **Tasks (all task roles)** — resolve every source for the map's `task_roles`
    (each business's `business_tasks` DB + the `university_tasks` DB). For each, query
-   items where the role's `due_date` (or `exam_date` for university) is today or earlier
-   and `status` ≠ the role's `done` value. Use each role's `db_role_schemas` for the real
+   items where the role's `due_date` (or `exam_date` for university) is today or earlier,
+   OR — for `business_tasks` — `status` = the role's `this_week` value; in all cases exclude
+   items whose `status` = the role's `done` value. Use each role's `db_role_schemas` for the real
    property names.
 4. **Work shift today** — resolve the `schedule` source (work_schedule_db) and find
    entries where the `date` property = today.

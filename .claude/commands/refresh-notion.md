@@ -1,7 +1,7 @@
 # /refresh-notion — Build & sync the workspace map
 
 Build or repair `context/lifeos.map.json`, then regenerate the human-readable
-`context/notion.md`. This is the ONLY skill that writes the map. See
+`context/notion.md`. This is the only skill that writes the **durable** map (`anchors`, `rules`, `db_role_schemas`, `task_roles`); consuming skills may lazily populate the disposable `resolved` cache per `context/resolver.md`. See
 `context/resolver.md` for how the map is consumed.
 
 ## Mode A — Bootstrap (no map yet, or `--bootstrap`)
