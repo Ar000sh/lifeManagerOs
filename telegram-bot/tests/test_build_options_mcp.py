@@ -13,16 +13,17 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-import bot  # noqa: E402
+import agent_runner  # noqa: E402
 
 
 def _options(monkeypatch):
     # build_options reads these module-level globals to decide which MCP servers
-    # to register; set them so both servers are configured.
-    monkeypatch.setattr(bot, "NOTION_TOKEN", "ntn_test_token")
-    monkeypatch.setattr(bot, "GOOGLE_OAUTH_CREDENTIALS", "/app/secrets/gcp-oauth.keys.json")
-    monkeypatch.setattr(bot, "GOOGLE_CALENDAR_MCP_TOKEN_PATH", "/app/secrets/tokens")
-    return bot.build_options()
+    # to register; set them so both servers are configured. The SDK adapter now
+    # lives in agent_runner (split out of bot.py during the live-conversations work).
+    monkeypatch.setattr(agent_runner, "NOTION_TOKEN", "ntn_test_token")
+    monkeypatch.setattr(agent_runner, "GOOGLE_OAUTH_CREDENTIALS", "/app/secrets/gcp-oauth.keys.json")
+    monkeypatch.setattr(agent_runner, "GOOGLE_CALENDAR_MCP_TOKEN_PATH", "/app/secrets/tokens")
+    return agent_runner.build_options()
 
 
 def test_mcp_tools_are_not_gated_by_tools_field(monkeypatch):
