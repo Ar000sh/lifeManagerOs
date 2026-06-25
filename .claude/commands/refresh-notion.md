@@ -1,47 +1,42 @@
-# /refresh-notion — Sync Notion Structure
+# /refresh-notion — Build & sync the workspace map
 
-Re-crawl the entire Notion workspace and update `context/notion.md` to reflect the current state.
-Run this whenever pages are added/removed, databases are restructured, or schemas change.
+Build or repair `context/lifeos.map.json`, then regenerate the human-readable
+`context/notion.md`. This is the ONLY skill that writes the map. See
+`context/resolver.md` for how the map is consumed.
 
-## Steps
+## Mode A — Bootstrap (no map yet, or `--bootstrap`)
+1. Find the workspace root: use `lifeos.map.json.workspace_root` if present; else
+   `notion-search` for the user's Life-OS root page. If nothing is found, STOP and ask
+   the user to (re)connect Notion.
+2. From the root, discover the top-level sections and identify anchors:
+   `business_root`, `university_section`, `university_tasks_db`, `modules_db`,
+   `work_schedule_db`. When a candidate is ambiguous, ask ONE question (ask-then-remember).
+3. For each operational DB, infer its **role** and **property-role schema** by inspecting
+   its property names + types (title, date, select, relation, checkbox). Record the
+   schema under `db_role_schemas`. Record select option labels you rely on under
+   `status_values` (e.g. `done`, `this_week`).
+4. Record enumeration `rules` (businesses are child pages under `business_root`, each with
+   a tasks DB of role `business_tasks`). Enumerate current businesses into
+   `resolved.businesses`.
+5. Set `task_roles` to the task-like roles to aggregate (default
+   `["business_tasks","university_tasks"]`).
+6. Write `context/lifeos.map.json`.
 
-### 1. Fetch the root and all top-level section pages in parallel
-- Root: `17f640b8-4c57-4cdb-8cb8-7de20d282e14`
-- Business: `02b35e4e-891d-4c3b-a8a1-8b5f3a968c34`
-- University: `25a31bbe-c66a-42d7-abd1-063ddf316f0e`
-- Work: `eb3dd869247246a0871a97ff7580d707`
+## Mode B — Incremental sync (map exists)
+1. Re-verify each anchor still resolves; if one is gone, resolve-on-miss (re-discover) or
+   ask. Update changed IDs.
+2. Re-enumerate businesses under `business_root`; add new ones / drop removed ones in
+   `resolved.businesses`.
+3. Re-check each role's `db_role_schemas` against live properties; update renamed columns
+   and new select options.
+4. Write the updated `context/lifeos.map.json`.
 
-### 2. Fetch all known sub-pages and collections in parallel
-Business sub-pages:
-- Laundromat Hannover: `39b55afae5704875a1641799948d8e38`
-- Van Company Czech Republic: `b5397190ebbf48fb98d8f6de7f410790`
+## Always — regenerate the human summary
+Rewrite `context/notion.md` from the map: a readable tree of sections, businesses, DBs,
+and each DB's role + key properties. Add the banner:
+`<!-- GENERATED from context/lifeos.map.json by /refresh-notion — do not hand-edit -->`
 
-Collections (fetch via collection:// URL to get full schema):
-- Laundromat Tasks: `collection://fdffad80-a34c-44a0-a9ed-afb05acd232e`
-- Van Company Tasks: `collection://ae28ef1d-5dec-45d2-b3ab-8132214d5361`
-- Modules: `collection://5e62acec-3f74-49f7-a8b2-c4b6937ca4b3`
-- University Tasks: `collection://580c2d1d-8813-4800-92a1-9db78568a1ca`
-- Work Schedule: `collection://55f90404-8783-412a-9f9d-e6d5011bcc7a`
-
-### 3. Detect changes
-Compare what you just fetched against `context/notion.md`. Look for:
-- New pages or sub-pages under any section
-- Removed pages
-- New or renamed database properties
-- New select/option values added to existing properties
-- New databases added to any page
-- Any collection URL that has changed
-
-### 4. Update context/notion.md
-Rewrite `context/notion.md` to reflect the current state exactly. Preserve the existing format and structure — only update the parts that changed.
-
-Also update `context/integrations.md` if any new MCP tools or connections are detected.
-
-### 5. Report
-Tell the user what changed in a short summary:
-- "X new pages found: ..."
-- "Schema changes in [DB]: ..."
-- "Nothing changed, context is up to date."
-
-If new top-level sections or business projects were added that aren't covered by the existing commands (`/today`, `/add`, `/week`), flag them:
-> "⚠️ New section '[Name]' found — consider updating the commands to include it."
+## Report
+Summarize what changed: new/removed businesses, anchor moves, schema/option changes, or
+"nothing changed." If a brand-new top-level section appeared that matches no rule, flag it
+and ask whether to map it (ask-then-remember).

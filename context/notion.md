@@ -1,3 +1,4 @@
+<!-- GENERATED from context/lifeos.map.json by /refresh-notion — do not hand-edit -->
 # Notion Workspace Map
 
 Workspace: **"Workspace von Aroosh Al-arashi"** — the THIRD of three identically named workspaces.
