@@ -1,42 +1,39 @@
-# /add — Add Something
+# /add — Add a record
 
-Add a task, event, shift, or module to the right place. The user will describe what they want to add after `/add`.
+Add a task, university item, exam, work shift, module, or calendar event to the right
+place. **Resolve all Notion targets via `context/resolver.md`.** This skill creates
+**records** (rows) only — it does NOT create new businesses, databases, sections, or
+views (that is the workspace-provisioning project).
 
-## Routing Logic
-
-Read the user's input and decide where it belongs:
-
-| What they say | Where it goes |
+## Routing
+| What the user says | Role / destination |
 |---|---|
-| task / to-do for Laundromat or Van Company | Business Tasks (correct collection) |
-| university task / assignment / study session | University Tasks |
-| exam | University Tasks with Type = Exam + set Exam Date |
-| work shift / I'm working | Work Schedule |
-| new module / course | Modules |
+| task / to-do for a business | `business_tasks` of that business (resolve by name under the `businesses` rule) |
+| university task / assignment / study session | `university_tasks` |
+| exam | `university_tasks`, Type = Exam, set `exam_date` |
+| work shift | `schedule` |
+| new module / course | `modules` |
 | meeting / appointment / event with a time | Google Calendar |
 | reminder | Google Calendar |
 
-If the destination is unclear, ask ONE question: "Is this for Business, University, Work, or Calendar?"
+If the destination is unclear, ask ONE question: "Business, University, Work, or Calendar?"
+If a business name is given but not yet in the map, resolve-on-miss (enumerate under
+`business_root`); if it does not exist, say so — do NOT create a new business here.
 
 ## Creating in Notion
-
-Use `notion-create-pages`. Required fields vary by database — see `context/notion.md` for schemas.
-
-- Always set at least: `Name`, `Status`, `Due Date` (if mentioned), `Priority` (default Medium if not specified).
-- For university tasks linked to a module: first search for the module with `notion-search` to get its URL, then set the `Module` relation.
-- For exams: set both `Due Date` (when to submit/prepare by) and `Exam Date` (actual exam day) if both are known.
+Use `notion-create-pages` into the resolved DB. Set columns via the destination role's
+`db_role_schemas` (never assume column names). Defaults: set `title`; set `status` to a
+sensible start value; set `priority` = Medium if not given; set `due_date` if mentioned.
+For a university task tied to a module: resolve `modules`, search the module page, set the
+`module` relation. For exams set both `due_date` (prep-by) and `exam_date` if known.
 
 ## Creating in Google Calendar
-
-Use `mcp__claude_ai_Google_Calendar__create_event`.
-- Always include a start time and end time. If end time not given, default to 1 hour.
-- Timezone: Europe/Berlin.
+Use the Google Calendar MCP create-event tool. Always set start + end (default 1h).
+Timezone: Europe/Berlin.
 
 ## Cross-posting
-
-If the user adds an exam or important deadline in Notion, ask: "Want me to also add a reminder in Google Calendar?"
+If adding an exam or important deadline in Notion, ask: "Also add a reminder in Google
+Calendar?"
 
 ## Confirm
-
-After creating, respond in one line:
-"Added **[Name]** to [destination] — [key detail like due date or time]."
+One line: "Added **[Name]** to [destination] — [key detail]."
