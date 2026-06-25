@@ -1,46 +1,38 @@
 # /today — Daily Briefing
 
-Give Aroosh a structured morning briefing for today. Pull live data — don't summarize from memory.
-
-**Notion reads:** Prefer the `notion-api` MCP server (official Notion API — supports real property filters). Query the relevant database filtered by Due Date / Status / date ranges directly, instead of semantic search + per-page fetch. Use semantic search only as a fallback if a filtered query fails.
+Structured morning briefing for today. Pull live data — don't summarize from memory.
+**Resolve all Notion targets via `context/resolver.md`.** Prefer filtered Notion API
+queries over semantic search.
 
 ## Steps
-
-1. **Get today's date** in Europe/Berlin time.
-
-2. **Google Calendar** — fetch today's events via the available Google Calendar MCP (its list-events tool). Show time + title for each.
-
-3. **University deadlines today or overdue** — search Notion University Tasks (collection `580c2d1d-8813-4800-92a1-9db78568a1ca`) for items with Due Date = today or earlier, Status ≠ Done.
-
-4. **Work shift today** — check Work Schedule (collection `55f90404-8783-412a-9f9d-e6d5011bcc7a`) for entries with Date = today.
-
-5. **Business tasks due today** — check all four business Tasks DBs for tasks with Due Date = today or Status = "This Week":
-   - Laundromat Hannover (`fdffad80-a34c-44a0-a9ed-afb05acd232e`)
-   - Van Company Czech Republic (`ae28ef1d-5dec-45d2-b3ab-8132214d5361`)
-   - TBHShop — Trip Back Home (`6905803e-faa1-444a-877e-296a5dbfcdbd`)
-   - Evening Dresses Export (`b0cf87a9-fa93-4dd2-8d9c-b883f925537a`)
+1. Get today's date in Europe/Berlin.
+2. **Calendar** — fetch today's events via the Google Calendar MCP list-events tool.
+   Show time + title.
+3. **Tasks (all task roles)** — resolve every source for the map's `task_roles`
+   (each business's `business_tasks` DB + the `university_tasks` DB). For each, query
+   items where the role's `due_date` (or `exam_date` for university) is today or earlier
+   and `status` ≠ the role's `done` value. Use each role's `db_role_schemas` for the real
+   property names.
+4. **Work shift today** — resolve the `schedule` source (work_schedule_db) and find
+   entries where the `date` property = today.
+5. If a source fails to resolve, self-heal per the resolver; if it still fails, include
+   the rest and flag the broken one rather than aborting.
 
 ## Output Format
-
-Keep it tight. Use this structure:
-
 ---
 **📅 [Day, Date]**
 
 **🗓 Calendar**
-- [time] Event name
-- (none if empty)
+- [time] Event name  (or "none")
 
 **🎓 University**
-- [URGENT if overdue] Task name — Due: date (Module)
-- (none if empty)
+- [URGENT if overdue] Task name — Due: date (Module)  (or "none")
 
 **💼 Work**
-- Shift: Start–End (or "No shift today")
+- Shift: Start–End  (or "No shift today")
 
 **🚀 Business**
-- Task name [Priority] — Business name
-- (none if empty)
+- Task name [Priority] — Business name  (or "none")
 
-**Quick note:** [one sentence observation — e.g. "2 exams this week, plan study time" or "nothing urgent today"]
+**Quick note:** [one-sentence observation]
 ---
