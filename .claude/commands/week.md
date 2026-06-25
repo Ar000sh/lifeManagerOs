@@ -1,29 +1,24 @@
 # /week — Weekly Overview
 
-Give Aroosh a structured view of the current week. Pull live data from Notion and Google Calendar.
-
-**Notion reads:** Prefer the `notion-api` MCP server (official Notion API — supports real property filters). Query the relevant database filtered by Due Date / Exam Date / Status / date ranges directly, instead of semantic search + per-page fetch. Use semantic search only as a fallback if a filtered query fails.
+Structured view of the current week (Mon–Sun, Europe/Berlin). Pull live data.
+**Resolve all Notion targets via `context/resolver.md`.** Prefer filtered Notion API
+queries over semantic search.
 
 ## Steps
-
-1. Determine the current week (Monday–Sunday) in Europe/Berlin time.
-
-2. **Google Calendar** — fetch all events for the week via the available Google Calendar MCP (its list-events tool).
-
-3. **Work shifts** — fetch Work Schedule (collection `55f90404-8783-412a-9f9d-e6d5011bcc7a`) filtered to this week's dates.
-
-4. **University deadlines this week** — fetch University Tasks (collection `580c2d1d-8813-4800-92a1-9db78568a1ca`) with Due Date or Exam Date within the week, Status ≠ Done. Sort by date ascending.
-
-5. **Business tasks this week** — fetch all four business Tasks DBs for tasks with Status = "This Week" or Due Date within the week:
-   - Laundromat Hannover (`fdffad80-a34c-44a0-a9ed-afb05acd232e`)
-   - Van Company Czech Republic (`ae28ef1d-5dec-45d2-b3ab-8132214d5361`)
-   - TBHShop — Trip Back Home (`6905803e-faa1-444a-877e-296a5dbfcdbd`)
-   - Evening Dresses Export (`b0cf87a9-fa93-4dd2-8d9c-b883f925537a`)
+1. Determine the current week (Monday–Sunday) in Europe/Berlin.
+2. **Calendar** — fetch all events for the week via the Google Calendar MCP list-events
+   tool.
+3. **Work shifts** — resolve the `schedule` source; fetch entries whose `date` falls in
+   the week.
+4. **University deadlines** — resolve the `university_tasks` source; fetch items whose
+   `due_date` or `exam_date` is within the week and `status` ≠ `done`; sort ascending.
+5. **Business tasks** — resolve every `business_tasks` source (all businesses); fetch
+   items whose `status` = the role's `this_week` value or whose `due_date` is within the
+   week.
+6. Self-heal failed sources per the resolver; flag any that stay broken.
 
 ## Output Format
-
-Group by day. Skip days with nothing.
-
+Group by day; skip empty days.
 ---
 **📆 Week of [Mon Date] – [Sun Date]**
 
@@ -33,10 +28,9 @@ Group by day. Skip days with nothing.
 - 🎓 [Task name] due (Module)
 - 🚀 [Business task] [Priority]
 
-**Tuesday, [Date]**
-...
+… (each day) …
 
 **Summary**
 - X university deadlines, X business tasks, X work shifts
-- [One actionable note — e.g. "Heavy Wednesday — exam + shift. Consider moving task X."]
+- [one actionable note]
 ---
