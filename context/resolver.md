@@ -14,8 +14,9 @@ and this file turns those into live IDs/columns using `context/lifeos.map.json`.
 - `db_role_schemas` — per role, the map from property-role (`title`, `status`,
   `due_date`, …) to that DB's actual column name, plus `status_values`.
 - `resolved` — write-back cache of already-discovered instances: `businesses` (pages
-  that ARE a business, with their `tasks_db`) and `ignored` (page IDs under an anchor
-  already checked and found NOT to be a business, so they are not re-probed every run).
+  that ARE a business, with their `tasks_db`) and `ignored` (an array of page-ID strings
+  — `["<page_id>", …]` — for pages under an anchor already checked and found NOT to be a
+  business, so they are not re-probed every run).
 
 ## Procedure
 
@@ -37,18 +38,19 @@ in bootstrap mode first, then continue.
      database matching the rule's `tasks_db_role` (a `business_tasks`-shaped DB)?
      - Exactly one match → it's an instance: **write it back** into `resolved.businesses`
        as `{ "page", "tasks_db", "role", "cached_at": <today> }`.
-     - No match (a notes/test page, e.g. `test`, `Goethe A1`) → record its page ID in
+     - No match (a notes/test page, e.g. `test`, `Goethe A1`) → append its page ID to
        `resolved.ignored` so it is not re-probed on later runs.
-     - Multiple candidate DBs / unclear → ask-then-remember (step 5), then record the
-       answer.
+     - Multiple candidate DBs / unclear → ask-then-remember (§5), then record the answer.
   5. Drop any `resolved.businesses` / `resolved.ignored` entry whose page no longer
      appears under the anchor (deleted or moved away).
 
   Steady-state cost: one list call; only a brand-new page triggers a one-time probe.
 
 ### 2. Resolve a named instance (e.g. "Laundromat's tasks DB")
-Check `resolved.businesses[name]` first. Miss → enumerate under the rule's anchor, match
-the name (case-insensitive, allow partial), write back, then use it.
+Check `resolved.businesses[name]` first. Miss → if the §1 reconcile already ran this
+invocation, its enumeration is current, so the name genuinely isn't a business yet;
+otherwise enumerate under the rule's anchor once, match the name (case-insensitive, allow
+partial), write back, then use it.
 
 ### 3. Property lookup
 Never hardcode a column. For role R and property-role P, use `db_role_schemas[R][P]`.
