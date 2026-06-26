@@ -13,7 +13,9 @@ and this file turns those into live IDs/columns using `context/lifeos.map.json`.
 - `task_roles` — which roles `/today` and `/week` aggregate as "tasks".
 - `db_role_schemas` — per role, the map from property-role (`title`, `status`,
   `due_date`, …) to that DB's actual column name, plus `status_values`.
-- `resolved` — write-back cache of already-discovered instances.
+- `resolved` — write-back cache of already-discovered instances: `businesses` (pages
+  that ARE a business, with their `tasks_db`) and `ignored` (page IDs under an anchor
+  already checked and found NOT to be a business, so they are not re-probed every run).
 
 ## Procedure
 
@@ -24,13 +26,25 @@ in bootstrap mode first, then continue.
 ### 1. Resolve a role's instances
 - **Single-instance role** (e.g. `university_tasks`, `modules`, `schedule`): the DB ID
   is the matching anchor (`university_tasks_db`, `modules_db`, `work_schedule_db`).
-- **Multi-instance role via a rule** (e.g. `business_tasks` under the `businesses` rule):
-  1. If `resolved.businesses` is non-empty, use those `tasks_db` IDs (cache hit — no
-     discovery).
-  2. On a cache miss or when you need to confirm freshness, enumerate child pages under
-     the rule's `under` anchor (one call), find each child's tasks database, and
-     **write each back** into `resolved.businesses` as
-     `{ "page", "tasks_db", "role", "cached_at": <today> }`.
+- **Multi-instance role via a rule** (e.g. `business_tasks` under the `businesses` rule)
+  — **reconcile every run** so newly added instances are picked up automatically:
+  1. Enumerate the child pages under the rule's `under` anchor (one cheap list call).
+     This is the authoritative current set of instances.
+  2. For a child already in `resolved.businesses`, reuse its cached `tasks_db` — no extra
+     call (deep task data still resolves from cache).
+  3. For a child already in `resolved.ignored`, skip it — no extra call.
+  4. For a genuinely new child (in neither list), probe it once: does it contain a
+     database matching the rule's `tasks_db_role` (a `business_tasks`-shaped DB)?
+     - Exactly one match → it's an instance: **write it back** into `resolved.businesses`
+       as `{ "page", "tasks_db", "role", "cached_at": <today> }`.
+     - No match (a notes/test page, e.g. `test`, `Goethe A1`) → record its page ID in
+       `resolved.ignored` so it is not re-probed on later runs.
+     - Multiple candidate DBs / unclear → ask-then-remember (step 5), then record the
+       answer.
+  5. Drop any `resolved.businesses` / `resolved.ignored` entry whose page no longer
+     appears under the anchor (deleted or moved away).
+
+  Steady-state cost: one list call; only a brand-new page triggers a one-time probe.
 
 ### 2. Resolve a named instance (e.g. "Laundromat's tasks DB")
 Check `resolved.businesses[name]` first. Miss → enumerate under the rule's anchor, match
