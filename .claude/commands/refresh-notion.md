@@ -28,7 +28,9 @@ Build or repair `context/lifeos.map.json`, then regenerate the human-readable
 1. Re-verify each anchor still resolves; if one is gone, resolve-on-miss (re-discover) or
    ask. Update changed IDs.
 2. Re-enumerate children under `business_root`; add new businesses / drop removed ones in
-   `resolved.businesses`, and keep `resolved.ignored` current for non-business children.
+   `resolved.businesses`. **Re-probe the `resolved.ignored` pages too** (rebuild the list),
+   so a page that has since gained a `business_tasks`-shaped DB is promoted to a business
+   instead of staying permanently ignored.
 3. Re-check each role's `db_role_schemas` against live properties; update renamed columns
    and new select options.
 4. Write the updated `context/lifeos.map.json`.
