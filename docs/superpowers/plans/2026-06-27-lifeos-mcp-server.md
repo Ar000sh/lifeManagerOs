@@ -6,7 +6,9 @@
 
 **Architecture:** A FastMCP **stdio** server. Workspace-specific facts live only in the map (anchors + `areas` + `role_schemas` + a self-healing `resolved` cache). Pure resolver functions turn function-roles (`tasks`/`schedule`/`catalog`) into live IDs/columns; narrow Notion-REST and Google-Calendar client wrappers do all network I/O; five tools compose resolver + clients into structured JSON. The agent formats the response. Registered as a third stdio MCP server in `telegram-bot/agent_runner.py` and project `.mcp.json`, so one toolbox serves the bot, Claude Code, and desktop.
 
-**Tech Stack:** Python 3.11+, `mcp` (FastMCP — already vendored in `telegram-bot/.venv`), `httpx` (Notion REST), `google-api-python-client` + `google-auth` (Calendar), `pytest`. Notion API version header `2022-06-28`. The Claude Agent SDK (`claude_agent_sdk`) consumes the server at runtime.
+**Tech Stack:** Python 3.10+ (the bot's `telegram-bot/.venv` is 3.10.2 and launches the server via `sys.executable` in production — code must stay 3.10-compatible), `mcp` (FastMCP — already in `telegram-bot/.venv`), `httpx` (Notion REST), `google-api-python-client` + `google-auth` (Calendar), `pytest`. Notion API version header `2022-06-28`. The Claude Agent SDK (`claude_agent_sdk`) consumes the server at runtime.
+
+**Execution environment (all Phase A tasks):** run tests with the bot venv interpreter `telegram-bot/.venv/Scripts/python.exe` (has pytest, httpx, mcp; google libs are NOT installed — fine, `calendar_client` imports them lazily). Invoke as `telegram-bot/.venv/Scripts/python.exe -m pytest ...` with the working directory set to `lifeos-mcp/`. `python` alone may not resolve to this venv on the Windows/git-bash shell.
 
 ## Global Constraints
 
@@ -122,7 +124,7 @@ Phase B touches existing files: `telegram-bot/agent_runner.py`, `.mcp.json`, `co
 [project]
 name = "lifeos-mcp"
 version = "0.1.0"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 dependencies = [
   "mcp>=1.0.0",
   "httpx>=0.27",
