@@ -656,8 +656,10 @@ def resolve_sources(map: dict, client, role: str) -> list[ResolvedSource]:
             if src.get("role") != role:
                 continue
             sid = _anchor_id(map, src["anchor"])
+            # schema for an anchored source is keyed by the anchor NAME (ids live
+            # only in `anchors`); the resolved id `sid` is used only for queries.
             out.append(ResolvedSource(sid, role, key, label, emoji,
-                                      schema_for(map, sid, role)))
+                                      schema_for(map, src["anchor"], role)))
         group = area.get("group")
         if group and any(cs.get("role") == role for cs in group.get("child_sources", [])):
             for sid, label_ in _resolve_group(map, client, key, group, role):
@@ -670,7 +672,7 @@ def _resolve_group(map, client, area_key, group, role):
     if not cache:  # cache miss -> enumerate once, write back (keyed by ID)
         ignored = set(map["resolved"].setdefault("ignored", []))
         tombstones = map["resolved"].setdefault("tombstones", {})
-        for child in client.get_block_children(group["under"]):
+        for child in client.get_block_children(_anchor_id(map, group["under"])):
             cid = child["id"]
             if cid in ignored or cid in tombstones:
                 continue
@@ -789,8 +791,9 @@ def reconcile_group(map: dict, client, area_key: str) -> dict:
     group = map["areas"][area_key]["group"]
     summary = {"renamed": [], "dropped": [], "tombstoned": [], "added": []}
 
-    # current children under the anchor, by id
-    present = {c["id"]: c for c in client.get_block_children(group["under"])}
+    # current children under the anchor, by id (resolve anchor name -> id)
+    under = map.get("anchors", {}).get(group["under"], group["under"])
+    present = {c["id"]: c for c in client.get_block_children(under)}
 
     deletions, hard_failures = [], 0
     for cid, entry in list(cache.items()):
