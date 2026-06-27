@@ -28,3 +28,37 @@ def test_extract_props_reads_select_and_date():
     assert props["Status"] == "Open"
     assert props["Due Date"] == "2026-06-27"
     assert props["Done?"] is True
+
+def test_retrieve_403_maps_to_auth():
+    import pytest, httpx
+    from lifeos_mcp.errors import NotionAuthError
+    c = _client(lambda req: httpx.Response(403, json={}))
+    with pytest.raises(NotionAuthError):
+        c.retrieve("x")
+
+def test_retrieve_429_maps_to_transient():
+    import pytest, httpx
+    from lifeos_mcp.errors import TransientError
+    c = _client(lambda req: httpx.Response(429, json={}))
+    with pytest.raises(TransientError):
+        c.retrieve("x")
+
+def test_retrieve_500_maps_to_transient():
+    import pytest, httpx
+    from lifeos_mcp.errors import TransientError
+    c = _client(lambda req: httpx.Response(500, json={}))
+    with pytest.raises(TransientError):
+        c.retrieve("x")
+
+def test_build_props_skips_none_and_maps_types():
+    from lifeos_mcp.notion_client import build_props
+    schema = {"title": "Name", "status": "Status", "due_date": "Due Date", "notes": "Notes"}
+    out = build_props(schema, {"title": "Buy soap", "status": "Open",
+                               "due_date": "2026-07-01", "notes": None,
+                               "missing_role": "x"})
+    assert out["Name"]["title"][0]["text"]["content"] == "Buy soap"
+    assert out["Status"]["select"]["name"] == "Open"
+    assert out["Due Date"]["date"]["start"] == "2026-07-01"
+    assert "Notes" not in out          # None skipped
+    # a role with no column in the schema is skipped silently
+    assert all(k in ("Name", "Status", "Due Date") for k in out)

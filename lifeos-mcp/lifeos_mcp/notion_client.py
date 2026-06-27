@@ -15,12 +15,6 @@ def _raise_for_status(resp: httpx.Response):
     if resp.status_code == 429 or resp.status_code >= 500: raise TransientError(str(resp.status_code))
     resp.raise_for_status()
 
-def _title_of(page: dict) -> str:
-    for v in page.get("properties", {}).values():
-        if v.get("type") == "title":
-            return "".join(t.get("plain_text", "") for t in v.get("title", []))
-    return page.get("id", "")
-
 def extract_props(page: dict) -> dict:
     out = {}
     for name, v in page.get("properties", {}).items():
@@ -46,9 +40,7 @@ def build_props(schema: dict, fields: dict) -> dict:
             continue
         if role == "title":
             props[col] = {"title": [{"text": {"content": str(value)}}]}
-        elif role in ("status",):
-            props[col] = {"select": {"name": str(value)}}
-        elif role == "priority":
+        elif role in ("status", "priority"):
             props[col] = {"select": {"name": str(value)}}
         elif role in ("due_date", "exam_date"):
             props[col] = {"date": {"start": str(value)}}
