@@ -1,0 +1,65 @@
+from datetime import date
+from .errors import NotionNotFound, NotionAuthError, TransientError, WorkspaceUnavailable
+
+def classify_error(exc) -> str:
+    if isinstance(exc, TransientError): return "transient"
+    if isinstance(exc, NotionAuthError): return "auth"
+    if isinstance(exc, NotionNotFound): return "notfound"
+    return "transient"
+
+def reconcile_group(map: dict, client, area_key: str) -> dict:
+    cache = map["resolved"]["groups"].setdefault(area_key, {})
+    group = map["areas"][area_key]["group"]
+    summary = {"renamed": [], "dropped": [], "tombstoned": [], "added": []}
+
+    # current children under the anchor, by id (resolve anchor name -> id)
+    under = map.get("anchors", {}).get(group["under"], group["under"])
+    present = {c["id"]: c for c in client.get_block_children(under)}
+
+    deletions, hard_failures = [], 0
+    for cid, entry in list(cache.items()):
+        if cid in present:
+            new_label = present[cid].get("title", entry["label"])
+            if new_label != entry["label"]:
+                entry["label"] = new_label; summary["renamed"].append(cid)
+            continue
+        # not under the group anymore: is it deleted, or just moved/inaccessible?
+        try:
+            client.retrieve(cid)
+            cache.pop(cid); summary["dropped"].append(cid)  # moved out of group
+        except Exception as exc:
+            kind = classify_error(exc)
+            if kind == "notfound":
+                deletions.append(cid)
+            else:
+                hard_failures += 1
+
+    # blast-radius guard (rules ii–iii): >1 hard failure => connection/permission
+    if hard_failures > 1:
+        raise WorkspaceUnavailable(f"{hard_failures} children failed to resolve in {area_key}")
+
+    for cid in deletions:
+        entry = cache.pop(cid)
+        map["resolved"]["tombstones"][cid] = {
+            "reason": "deleted", "label": entry.get("label"), "seen_at": date.today().isoformat()}
+        summary["tombstoned"].append(cid)
+
+    # add genuinely new children
+    ignored = set(map["resolved"].get("ignored", []))
+    for cid, child in present.items():
+        if cid in cache or cid in map["resolved"]["tombstones"] or cid in ignored:
+            continue
+        db = client.find_tasks_db_under(cid)
+        if not db:
+            ignored.add(cid); continue
+        cache[cid] = {"label": child.get("title", cid), "role": "tasks",
+                      "tasks_db": db, "cached_at": date.today().isoformat()}
+        summary["added"].append(cid)
+    map["resolved"]["ignored"] = sorted(ignored)
+    return summary
+
+def drop_stale(map: dict, source_id: str) -> None:
+    for area in map["resolved"]["groups"].values():
+        for cid, entry in list(area.items()):
+            if entry.get("tasks_db") == source_id:
+                area.pop(cid)
