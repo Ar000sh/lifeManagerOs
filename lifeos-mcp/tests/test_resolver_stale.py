@@ -38,3 +38,30 @@ def test_blast_radius_guard_raises_and_preserves_cache():
     with pytest.raises(WorkspaceUnavailable):
         reconcile_group(m, client, "ventures")
     assert m["resolved"]["groups"]["ventures"] == before  # unchanged (rule iii)
+
+def test_blast_radius_guard_preserves_moved_out_entry():
+    import copy
+    m = copy.deepcopy(FIXTURE_MAP)  # has venture laundro-page -> laundro-db
+    # add two more cached children that will hard-fail
+    m["resolved"]["groups"]["ventures"]["b-page"] = {
+        "label": "B", "role": "tasks", "tasks_db": "b-db", "cached_at": "2026-06-26"}
+    m["resolved"]["groups"]["ventures"]["c-page"] = {
+        "label": "C", "role": "tasks", "tasks_db": "c-db", "cached_at": "2026-06-26"}
+    # none present under the group; laundro-page retrieves OK (moved out),
+    # b-page and c-page raise auth (2 hard failures)
+    client = FakeNotionClient(
+        children={"biz-root": []},
+        pages={"laundro-page": {"id": "laundro-page"}},   # retrieve succeeds
+        fail_with={"b-page": NotionAuthError, "c-page": NotionAuthError},
+    )
+    before = copy.deepcopy(m["resolved"]["groups"]["ventures"])
+    with pytest.raises(WorkspaceUnavailable):
+        reconcile_group(m, client, "ventures")
+    assert m["resolved"]["groups"]["ventures"] == before  # NO mutation, incl. the moved-out entry
+
+def test_drop_stale_removes_entry_by_tasks_db():
+    import copy
+    from lifeos_mcp.resolver_stale import drop_stale
+    m = copy.deepcopy(FIXTURE_MAP)
+    drop_stale(m, "laundro-db")
+    assert "laundro-page" not in m["resolved"]["groups"]["ventures"]
