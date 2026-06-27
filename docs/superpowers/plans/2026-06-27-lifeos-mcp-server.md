@@ -795,7 +795,7 @@ def reconcile_group(map: dict, client, area_key: str) -> dict:
     under = map.get("anchors", {}).get(group["under"], group["under"])
     present = {c["id"]: c for c in client.get_block_children(under)}
 
-    deletions, hard_failures = [], 0
+    deletions, move_outs, hard_failures = [], [], 0
     for cid, entry in list(cache.items()):
         if cid in present:
             new_label = present[cid].get("title", entry["label"])
@@ -805,7 +805,7 @@ def reconcile_group(map: dict, client, area_key: str) -> dict:
         # not under the group anymore: is it deleted, or just moved/inaccessible?
         try:
             client.retrieve(cid)
-            cache.pop(cid); summary["dropped"].append(cid)  # moved out of group
+            move_outs.append(cid); summary["dropped"].append(cid)  # moved out (deferred past guard)
         except Exception as exc:
             kind = classify_error(exc)
             if kind == "notfound":
@@ -813,10 +813,13 @@ def reconcile_group(map: dict, client, area_key: str) -> dict:
             else:
                 hard_failures += 1
 
-    # blast-radius guard (rules ii–iii): >1 hard failure => connection/permission
+    # blast-radius guard (rules ii–iii): >1 hard failure => connection/permission.
+    # MUST run before ANY cache mutation — drops, tombstones, and adds are all deferred.
     if hard_failures > 1:
         raise WorkspaceUnavailable(f"{hard_failures} children failed to resolve in {area_key}")
 
+    for cid in move_outs:
+        cache.pop(cid, None)
     for cid in deletions:
         entry = cache.pop(cid)
         map["resolved"]["tombstones"][cid] = {
