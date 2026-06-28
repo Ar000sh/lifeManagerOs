@@ -59,7 +59,7 @@ def _shift(map, notion, source, today, warnings):
                 source_id=source.source_id)
     return None
 
-def  get_today(map, notion, calendar, today: date, tz: str = "Europe/Berlin") -> TodayPayload:
+def get_today(map, notion, calendar, today: date, tz: str = "Europe/Berlin") -> TodayPayload:
     warnings: list[str] = []
     task_sources = resolve_sources(map, notion, "tasks", warnings)
     sched_sources = resolve_sources(map, notion, "schedule", warnings)
