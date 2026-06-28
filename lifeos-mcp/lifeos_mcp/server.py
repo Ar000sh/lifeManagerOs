@@ -49,7 +49,7 @@ def build_app(settings: Settings, notion=None, calendar=None) -> FastMCP:
         return payload.to_dict()
 
     @app.tool(name="query_records")
-    def query_records_tool(role: str, filters: dict = None) -> list:
+    def query_records_tool(role: str, filters: dict | None = None) -> list:
         """Query records of a function role (tasks/schedule/catalog) with optional filters."""
         m = load_map(settings.map_path)
         res = query_records(m, _notion(), role, filters)
@@ -57,7 +57,7 @@ def build_app(settings: Settings, notion=None, calendar=None) -> FastMCP:
         return res
 
     @app.tool(name="add_record")
-    def add_record_tool(role: str, fields: dict, area: str = None) -> dict:
+    def add_record_tool(role: str, fields: dict, area: str | None = None) -> dict:
         """Create a record (row) of a role into its resolved destination. Records only."""
         m = load_map(settings.map_path)
         res = add_record(m, _notion(), role, fields, area)
@@ -65,7 +65,7 @@ def build_app(settings: Settings, notion=None, calendar=None) -> FastMCP:
         return res
 
     @app.tool(name="create_event")
-    def create_event_tool(title: str, start: str, end: str = None, notes: str = None) -> dict:
+    def create_event_tool(title: str, start: str, end: str | None = None, notes: str | None = None) -> dict:
         """Create a Google Calendar event (Europe/Berlin, default 1h)."""
         return create_event(_calendar(), title, start, end, notes)
 
