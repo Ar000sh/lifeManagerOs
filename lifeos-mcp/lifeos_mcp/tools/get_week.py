@@ -16,7 +16,7 @@ def get_week(map, notion, calendar, today: date, tz: str = "Europe/Berlin") -> W
     def bucket(d): return buckets.setdefault(d.isoformat(),
         {"date": d.isoformat(), "tasks": [], "exams": [], "shift": None, "events": []})
 
-    for s in resolve_sources(map, notion, "tasks"):
+    for s in resolve_sources(map, notion, "tasks", warnings):
         try:
             rows = notion.query_data_source(s.source_id)
         except Exception as exc:
@@ -36,7 +36,7 @@ def get_week(map, notion, calendar, today: date, tz: str = "Europe/Berlin") -> W
             if due and start <= due <= end: bucket(due)["tasks"].append(item)
             elif tw and status == tw: bucket(start)["tasks"].append(item)
 
-    for s in resolve_sources(map, notion, "schedule"):
+    for s in resolve_sources(map, notion, "schedule", warnings):
         try:
             rows = notion.query_data_source(s.source_id)
         except Exception as exc:

@@ -48,3 +48,14 @@ def test_resolve_named_splits_area_and_source_label():
     assert named.source_id == "laundro-db"
     assert named.area_label == "Business"
     assert named.source_label == "Laundromat Hannover"
+
+def test_group_enumeration_failure_warns_and_keeps_cache_empty():
+    from lifeos_mcp.errors import TransientError
+    m = copy.deepcopy(FIXTURE_MAP)
+    m["resolved"]["groups"]["ventures"] = {}            # force cache miss
+    client = FakeNotionClient(fail_with={"biz-root": TransientError})
+    warnings = []
+    sources = resolve_sources(m, client, "tasks", warnings)
+    assert "uni-tasks" in {s.source_id for s in sources}  # anchored source survives
+    assert any("ventures" in w for w in warnings)         # discovery failure recorded
+    assert m["resolved"]["groups"]["ventures"] == {}      # no partial cache committed

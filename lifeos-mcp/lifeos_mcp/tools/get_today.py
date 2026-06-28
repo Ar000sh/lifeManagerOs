@@ -61,8 +61,8 @@ def _shift(map, notion, source, today, warnings):
 
 def  get_today(map, notion, calendar, today: date, tz: str = "Europe/Berlin") -> TodayPayload:
     warnings: list[str] = []
-    task_sources = resolve_sources(map, notion, "tasks")
-    sched_sources = resolve_sources(map, notion, "schedule")
+    task_sources = resolve_sources(map, notion, "tasks", warnings)
+    sched_sources = resolve_sources(map, notion, "schedule", warnings)
     blocks = []
     for area in iter_areas(map):
         a_tasks, a_exams, a_shift = [], [], None

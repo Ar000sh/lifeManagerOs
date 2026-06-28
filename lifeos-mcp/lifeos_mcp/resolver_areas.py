@@ -15,7 +15,7 @@ def iter_areas(map: dict) -> list[dict]:
 def _anchor_id(map: dict, anchor: str) -> str:
     return map.get("anchors", {}).get(anchor, anchor)
 
-def resolve_sources(map: dict, client, role: str) -> list[ResolvedSource]:
+def resolve_sources(map: dict, client, role: str, warnings=None) -> list[ResolvedSource]:
     out: list[ResolvedSource] = []
     for key, area in map.get("areas", {}).items():
         label, emoji = area.get("label", key), area.get("emoji", "")
@@ -29,27 +29,32 @@ def resolve_sources(map: dict, client, role: str) -> list[ResolvedSource]:
                                       schema_for(map, src["anchor"], role)))
         group = area.get("group")
         if group and any(cs.get("role") == role for cs in group.get("child_sources", [])):
-            for sid, label_ in _resolve_group(map, client, key, group, role):
+            for sid, label_ in _resolve_group(map, client, key, group, role, warnings):
                 out.append(ResolvedSource(sid, role, key, label, emoji,
                                           schema_for(map, sid, role), source_label=label_))
     return out
 
-def _resolve_group(map, client, area_key, group, role):
+def _resolve_group(map, client, area_key, group, role, warnings=None):
     cache = map.setdefault("resolved", {}).setdefault("groups", {}).setdefault(area_key, {})
-    if not cache:  # cache miss -> enumerate once, write back (keyed by ID)
-        #child pages we looked at before and found they have no tasks database inside
+    if not cache:  # cache miss -> enumerate into a local, commit atomically
         ignored = set(map["resolved"].setdefault("ignored", []))
-        #children that were deleted
         tombstones = map["resolved"].setdefault("tombstones", {})
-        for child in client.get_block_children(_anchor_id(map, group["under"])):
-            cid = child["id"]
-            if cid in ignored or cid in tombstones:
-                continue
-            db = client.find_tasks_db_under(cid)
-            if not db:
-                ignored.add(cid); continue
-            cache[cid] = {"label": child.get("title", cid), "role": role,
-                          "tasks_db": db, "cached_at": date.today().isoformat()}
+        discovered = {}
+        try:
+            for child in client.get_block_children(_anchor_id(map, group["under"])):
+                cid = child["id"]
+                if cid in ignored or cid in tombstones:
+                    continue
+                db = client.find_tasks_db_under(cid)
+                if not db:
+                    ignored.add(cid); continue
+                discovered[cid] = {"label": child.get("title", cid), "role": role,
+                                   "tasks_db": db, "cached_at": date.today().isoformat()}
+        except Exception as exc:
+            if warnings is not None:
+                warnings.append(f"venture discovery for {area_key} failed: {exc}")
+            return  # commit nothing; cache stays empty -> retried next run
+        cache.update(discovered)
         map["resolved"]["ignored"] = sorted(ignored)
     for cid, entry in cache.items():
         if entry.get("role") == role:

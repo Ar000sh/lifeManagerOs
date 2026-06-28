@@ -64,3 +64,14 @@ def test_today_tags_tasks_with_source_label():
     assert by_title["Call landlord"].source_label == "Laundromat Hannover"
     assert by_title["Essay"].source_label is None
     assert by_title["Call landlord"].to_dict()["source_label"] == "Laundromat Hannover"
+
+def test_today_group_discovery_failure_warns_not_aborts():
+    from lifeos_mcp.errors import TransientError
+    m = copy.deepcopy(FIXTURE_MAP)
+    m["resolved"]["groups"]["ventures"] = {}            # force cache miss
+    notion = FakeNotionClient(
+        rows={"uni-tasks": [_row("Essay", "Open", "2026-06-27")]},
+        fail_with={"biz-root": TransientError})
+    payload = get_today(m, notion, FakeCalendarClient(), date(2026, 6, 27))
+    assert any("ventures" in w for w in payload.warnings)
+    assert any(t.title == "Essay" for a in payload.areas for t in a.tasks)
