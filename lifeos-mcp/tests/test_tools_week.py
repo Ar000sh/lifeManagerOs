@@ -18,3 +18,15 @@ def test_week_includes_in_range_open_tasks():
     notion = FakeNotionClient(rows={"uni-tasks": [row]})
     payload = get_week(m, notion, FakeCalendarClient(), date(2026, 6, 27))
     assert payload.summary["tasks"] >= 1
+
+def test_week_task_items_carry_source_label():
+    m = copy.deepcopy(FIXTURE_MAP)
+    row = {"id": "t1", "url": "u", "properties": {
+        "Name": {"type": "title", "title": [{"plain_text": "Soap order"}]},
+        "Status": {"type": "select", "select": {"name": "Open"}},
+        "Due Date": {"type": "date", "date": {"start": "2026-06-25"}}}}
+    notion = FakeNotionClient(rows={"laundro-db": [row]})
+    payload = get_week(m, notion, FakeCalendarClient(), date(2026, 6, 27))
+    items = [it for d in payload.days for it in d["tasks"]]
+    assert any(it["title"] == "Soap order" and it["source_label"] == "Laundromat Hannover"
+               for it in items)

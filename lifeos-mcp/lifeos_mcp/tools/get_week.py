@@ -30,8 +30,8 @@ def get_week(map, notion, calendar, today: date, tz: str = "Europe/Berlin") -> W
             exam = _to_date(props.get(prop(sch,"exam_date"))) if prop(sch,"exam_date") else None
             title = props.get(prop(sch,"title")) or ""
             status = props.get(prop(sch,"status")) if prop(sch,"status") else None
-            item = {"title": title, "area": s.area_label, "status": status,
-                    "due_date": due.isoformat() if due else None}
+            item = {"title": title, "area": s.area_label, "source_label": s.source_label,
+                    "status": status, "due_date": due.isoformat() if due else None}
             if exam and start <= exam <= end: bucket(exam)["exams"].append(item)
             if due and start <= due <= end: bucket(due)["tasks"].append(item)
             elif tw and status == tw: bucket(start)["tasks"].append(item)
