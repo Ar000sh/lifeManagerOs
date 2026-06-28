@@ -4,7 +4,8 @@ from ..models import TaskRecord, ScheduleRecord, EventRecord, AreaBlock, TodayPa
 from ..resolver_areas import resolve_sources, iter_areas
 from ..resolver_schema import prop, is_done
 from ..notion_client import extract_props
-from ..resolver_stale import reconcile_due_groups
+from ..resolver_stale import reconcile_due_groups, reconcile_group
+from ..errors import NotionNotFound, WorkspaceUnavailable
 
 def _to_date(s):
     return date.fromisoformat(s[:10]) if s else None
@@ -16,12 +17,14 @@ def _day_window(d: date, tz: str) -> tuple[str, str]:
     return (datetime.combine(d, time.min, zone).isoformat(),
             datetime.combine(d, time.max, zone).isoformat())
 
-def _task_rows(map, notion, source, today, warnings):
+def _task_rows(map, notion, source, today, warnings, stale_groups):
     tasks, exams = [], []
     try:
         rows = notion.query_data_source(source.source_id)
     except Exception as exc:
         warnings.append(f"task source {source.source_id} failed: {exc}")
+        if isinstance(exc, NotionNotFound) and source.source_label:
+            stale_groups.add(source.area_key)
         return tasks, exams
     sch = source.schema
     for row in rows:
@@ -65,16 +68,24 @@ def get_today(map, notion, calendar, today: date, tz: str = "Europe/Berlin") -> 
     reconcile_due_groups(map, notion, today, warnings)
     task_sources = resolve_sources(map, notion, "tasks", warnings)
     sched_sources = resolve_sources(map, notion, "schedule", warnings)
+    stale_groups: set[str] = set()
     blocks = []
     for area in iter_areas(map):
         a_tasks, a_exams, a_shift = [], [], None
         for s in (s for s in task_sources if s.area_key == area["key"]):
-            ts, es = _task_rows(map, notion, s, today, warnings)
+            ts, es = _task_rows(map, notion, s, today, warnings, stale_groups)
             a_tasks += ts; a_exams += es
         for s in (s for s in sched_sources if s.area_key == area["key"]):
             a_shift = a_shift or _shift(map, notion, s, today, warnings)
         if a_tasks or a_exams or a_shift:
             blocks.append(AreaBlock(area["label"], area["emoji"], a_tasks, a_exams, a_shift))
+    for area_key in stale_groups:
+        try:
+            reconcile_group(map, notion, area_key)
+        except WorkspaceUnavailable:
+            raise
+        except Exception as exc:
+            warnings.append(f"reconcile {area_key} failed: {exc}")
     events = []
     try:
         tmin, tmax = _day_window(today, tz)

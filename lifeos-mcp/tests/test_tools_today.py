@@ -120,3 +120,18 @@ def test_today_b_blast_radius_raises_workspace_unavailable():
         fail_with={"laundro-page": NotionAuthError, "second-page": NotionAuthError})
     with pytest.raises(WorkspaceUnavailable):
         get_today(m, notion, FakeCalendarClient(), date(2026, 6, 27))
+
+def test_today_d_self_heals_deleted_venture_after_daily_reconcile():
+    from lifeos_mcp.errors import NotionNotFound
+    m = copy.deepcopy(FIXTURE_MAP)
+    # B already ran today -> the daily gate will skip; only D can react
+    m.setdefault("resolved", {}).setdefault("reconciled", {})["ventures"] = "2026-06-27"
+    notion = FakeNotionClient(
+        children={"biz-root": []},                       # laundro-page gone from Notion
+        rows={"uni-tasks": [_row("Essay", "Open", "2026-06-27")]},
+        fail_with={"laundro-db": NotionNotFound,          # query 404 -> triggers D
+                   "laundro-page": NotionNotFound})        # retrieve 404 -> reconcile classifies deleted
+    p = get_today(m, notion, FakeCalendarClient(), date(2026, 6, 27))
+    assert any(t.title == "Essay" for a in p.areas for t in a.tasks)     # briefing survives
+    assert "laundro-page" not in m["resolved"]["groups"]["ventures"]      # D tombstoned it
+    assert "laundro-page" in m["resolved"]["tombstones"]

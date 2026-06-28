@@ -3,7 +3,8 @@ from ..models import EventRecord, WeekPayload
 from ..resolver_areas import resolve_sources
 from ..resolver_schema import prop, is_done
 from ..notion_client import extract_props
-from ..resolver_stale import reconcile_due_groups
+from ..resolver_stale import reconcile_due_groups, reconcile_group
+from ..errors import NotionNotFound, WorkspaceUnavailable
 from .get_today import _to_date, _day_window
 
 def week_bounds(today: date) -> tuple[date, date]:
@@ -18,11 +19,15 @@ def get_week(map, notion, calendar, today: date, tz: str = "Europe/Berlin") -> W
     def bucket(d): return buckets.setdefault(d.isoformat(),
         {"date": d.isoformat(), "tasks": [], "exams": [], "shift": None, "events": []})
 
+    stale_groups: set[str] = set()
     for s in resolve_sources(map, notion, "tasks", warnings):
         try:
             rows = notion.query_data_source(s.source_id)
         except Exception as exc:
-            warnings.append(f"task source {s.source_id} failed: {exc}"); continue
+            warnings.append(f"task source {s.source_id} failed: {exc}")
+            if isinstance(exc, NotionNotFound) and s.source_label:
+                stale_groups.add(s.area_key)
+            continue
         sch = s.schema
         tw = (sch.get("status_values") or {}).get("this_week")
         for row in rows:
@@ -51,6 +56,14 @@ def get_week(map, notion, calendar, today: date, tz: str = "Europe/Berlin") -> W
                 bucket(d)["shift"] = {"title": props.get(prop(sch,"title")) or "",
                     "start": props.get(prop(sch,"start")) if prop(sch,"start") else None,
                     "end": props.get(prop(sch,"end")) if prop(sch,"end") else None}
+
+    for area_key in stale_groups:
+        try:
+            reconcile_group(map, notion, area_key)
+        except WorkspaceUnavailable:
+            raise
+        except Exception as exc:
+            warnings.append(f"reconcile {area_key} failed: {exc}")
 
     try:
         evs = calendar.list_events(_day_window(start, tz)[0], _day_window(end, tz)[1])
