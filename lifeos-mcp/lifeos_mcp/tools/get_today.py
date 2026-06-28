@@ -4,6 +4,7 @@ from ..models import TaskRecord, ScheduleRecord, EventRecord, AreaBlock, TodayPa
 from ..resolver_areas import resolve_sources, iter_areas
 from ..resolver_schema import prop, is_done
 from ..notion_client import extract_props
+from ..resolver_stale import reconcile_due_groups
 
 def _to_date(s):
     return date.fromisoformat(s[:10]) if s else None
@@ -61,6 +62,7 @@ def _shift(map, notion, source, today, warnings):
 
 def get_today(map, notion, calendar, today: date, tz: str = "Europe/Berlin") -> TodayPayload:
     warnings: list[str] = []
+    reconcile_due_groups(map, notion, today, warnings)
     task_sources = resolve_sources(map, notion, "tasks", warnings)
     sched_sources = resolve_sources(map, notion, "schedule", warnings)
     blocks = []

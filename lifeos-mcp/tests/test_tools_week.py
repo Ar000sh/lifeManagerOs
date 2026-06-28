@@ -21,6 +21,7 @@ def test_week_includes_in_range_open_tasks():
 
 def test_week_task_items_carry_source_label():
     m = copy.deepcopy(FIXTURE_MAP)
+    m.setdefault("resolved", {}).setdefault("reconciled", {})["ventures"] = "2026-06-27"  # skip daily reconcile
     row = {"id": "t1", "url": "u", "properties": {
         "Name": {"type": "title", "title": [{"plain_text": "Soap order"}]},
         "Status": {"type": "select", "select": {"name": "Open"}},

@@ -3,6 +3,7 @@ from ..models import EventRecord, WeekPayload
 from ..resolver_areas import resolve_sources
 from ..resolver_schema import prop, is_done
 from ..notion_client import extract_props
+from ..resolver_stale import reconcile_due_groups
 from .get_today import _to_date, _day_window
 
 def week_bounds(today: date) -> tuple[date, date]:
@@ -12,6 +13,7 @@ def week_bounds(today: date) -> tuple[date, date]:
 def get_week(map, notion, calendar, today: date, tz: str = "Europe/Berlin") -> WeekPayload:
     start, end = week_bounds(today)
     warnings: list[str] = []
+    reconcile_due_groups(map, notion, today, warnings)
     buckets: dict[str, dict] = {}
     def bucket(d): return buckets.setdefault(d.isoformat(),
         {"date": d.isoformat(), "tasks": [], "exams": [], "shift": None, "events": []})

@@ -13,6 +13,7 @@ def _row(title, status, due):
 
 def test_today_aggregates_tasks_due_and_open():
     m = copy.deepcopy(FIXTURE_MAP)
+    m.setdefault("resolved", {}).setdefault("reconciled", {})["ventures"] = "2026-06-27"  # skip daily reconcile
     notion = FakeNotionClient(rows={
         "uni-tasks": [_row("Essay", "Open", "2026-06-27"), _row("OldDone", "Done", "2026-06-01")],
         "laundro-db": [_row("Call landlord", "Open", "2026-06-26")]})
@@ -26,6 +27,7 @@ def test_today_aggregates_tasks_due_and_open():
 def test_today_partial_failure_warns_not_aborts():
     from lifeos_mcp.errors import TransientError
     m = copy.deepcopy(FIXTURE_MAP)
+    m.setdefault("resolved", {}).setdefault("reconciled", {})["ventures"] = "2026-06-27"  # skip daily reconcile
     notion = FakeNotionClient(rows={"uni-tasks": [_row("Essay","Open","2026-06-27")]},
                               fail_with={"laundro-db": TransientError})
     cal = FakeCalendarClient()
@@ -56,6 +58,7 @@ def test_today_calendar_failure_warns_and_empty():
 
 def test_today_tags_tasks_with_source_label():
     m = copy.deepcopy(FIXTURE_MAP)
+    m.setdefault("resolved", {}).setdefault("reconciled", {})["ventures"] = "2026-06-27"  # skip daily reconcile
     notion = FakeNotionClient(rows={
         "uni-tasks": [_row("Essay", "Open", "2026-06-27")],
         "laundro-db": [_row("Call landlord", "Open", "2026-06-26")]})
@@ -75,3 +78,45 @@ def test_today_group_discovery_failure_warns_not_aborts():
     payload = get_today(m, notion, FakeCalendarClient(), date(2026, 6, 27))
     assert any("ventures" in w for w in payload.warnings)
     assert any(t.title == "Essay" for a in payload.areas for t in a.tasks)
+
+def test_today_b_reflects_direct_notion_rename():
+    m = copy.deepcopy(FIXTURE_MAP)
+    notion = FakeNotionClient(
+        children={"biz-root": [{"id": "laundro-page", "title": "Laundromat HQ"}]},
+        child_db={"laundro-page": "laundro-db"},
+        rows={"laundro-db": [_row("Soap", "Open", "2026-06-27")]})
+    p = get_today(m, notion, FakeCalendarClient(), date(2026, 6, 27))
+    assert any(t.source_label == "Laundromat HQ" for a in p.areas for t in a.tasks)
+
+def test_today_b_daily_gate_holds():
+    m = copy.deepcopy(FIXTURE_MAP)
+    notion = FakeNotionClient(
+        children={"biz-root": [{"id": "laundro-page", "title": "First"}]},
+        child_db={"laundro-page": "laundro-db"},
+        rows={"laundro-db": [_row("Soap", "Open", "2026-06-27")]})
+    get_today(m, notion, FakeCalendarClient(), date(2026, 6, 27))        # stamps; label -> First
+    notion.children = {"biz-root": [{"id": "laundro-page", "title": "Second"}]}  # renamed again, same day
+    p = get_today(m, notion, FakeCalendarClient(), date(2026, 6, 27))
+    labels = {t.source_label for a in p.areas for t in a.tasks}
+    assert "First" in labels and "Second" not in labels                 # gate skipped re-reconcile
+
+def test_today_b_transient_reconcile_warns_keeps_cache():
+    from lifeos_mcp.errors import TransientError
+    m = copy.deepcopy(FIXTURE_MAP)
+    notion = FakeNotionClient(fail_with={"biz-root": TransientError},
+        rows={"uni-tasks": [_row("Essay", "Open", "2026-06-27")],
+              "laundro-db": [_row("Soap", "Open", "2026-06-27")]})
+    p = get_today(m, notion, FakeCalendarClient(), date(2026, 6, 27))
+    assert any("reconcile" in w for w in p.warnings)
+    assert "Soap" in {t.title for a in p.areas for t in a.tasks}         # stale cache still used
+
+def test_today_b_blast_radius_raises_workspace_unavailable():
+    import pytest
+    from lifeos_mcp.errors import NotionAuthError, WorkspaceUnavailable
+    m = copy.deepcopy(FIXTURE_MAP)
+    m["resolved"]["groups"]["ventures"]["second-page"] = {
+        "label": "Two", "role": "tasks", "tasks_db": "two-db", "cached_at": "2026-06-26"}
+    notion = FakeNotionClient(children={"biz-root": []},
+        fail_with={"laundro-page": NotionAuthError, "second-page": NotionAuthError})
+    with pytest.raises(WorkspaceUnavailable):
+        get_today(m, notion, FakeCalendarClient(), date(2026, 6, 27))
