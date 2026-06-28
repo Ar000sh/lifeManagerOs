@@ -1,6 +1,7 @@
 # tests/test_resolver_stale.py
 import copy, pytest
-from lifeos_mcp.resolver_stale import classify_error, reconcile_group
+from datetime import date
+from lifeos_mcp.resolver_stale import classify_error, reconcile_group, reconcile_due_groups
 from lifeos_mcp.errors import NotionNotFound, NotionAuthError, TransientError, WorkspaceUnavailable
 from tests.fixtures.maps import FIXTURE_MAP
 from tests.fakes import FakeNotionClient
@@ -65,3 +66,50 @@ def test_drop_stale_removes_entry_by_tasks_db():
     m = copy.deepcopy(FIXTURE_MAP)
     drop_stale(m, "laundro-db")
     assert "laundro-page" not in m["resolved"]["groups"]["ventures"]
+
+def test_reconcile_due_runs_and_stamps_when_unstamped():
+    m = copy.deepcopy(FIXTURE_MAP)
+    client = FakeNotionClient(
+        children={"biz-root": [{"id": "laundro-page", "title": "Laundromat HQ"}]},
+        child_db={"laundro-page": "laundro-db"})
+    reconcile_due_groups(m, client, date(2026, 6, 29))
+    assert m["resolved"]["groups"]["ventures"]["laundro-page"]["label"] == "Laundromat HQ"
+    assert m["resolved"]["reconciled"]["ventures"] == "2026-06-29"
+
+def test_reconcile_due_skips_when_stamped_today():
+    m = copy.deepcopy(FIXTURE_MAP)
+    m.setdefault("resolved", {}).setdefault("reconciled", {})["ventures"] = "2026-06-29"
+    client = FakeNotionClient(
+        children={"biz-root": [{"id": "laundro-page", "title": "Renamed"}]},
+        child_db={"laundro-page": "laundro-db"})
+    reconcile_due_groups(m, client, date(2026, 6, 29))
+    # gate held -> no rename applied
+    assert m["resolved"]["groups"]["ventures"]["laundro-page"]["label"] == "Laundromat Hannover"
+
+def test_reconcile_due_skips_empty_group_cache():
+    m = copy.deepcopy(FIXTURE_MAP)
+    m["resolved"]["groups"]["ventures"] = {}   # undiscovered
+    calls = {"n": 0}
+    class C(FakeNotionClient):
+        def get_block_children(self, b):
+            calls["n"] += 1
+            return []
+    reconcile_due_groups(m, C(), date(2026, 6, 29))
+    assert calls["n"] == 0
+
+def test_reconcile_due_propagates_workspace_unavailable():
+    m = copy.deepcopy(FIXTURE_MAP)
+    m["resolved"]["groups"]["ventures"]["second-page"] = {
+        "label": "Two", "role": "tasks", "tasks_db": "two-db", "cached_at": "2026-06-26"}
+    client = FakeNotionClient(children={"biz-root": []},
+        fail_with={"laundro-page": NotionAuthError, "second-page": NotionAuthError})
+    with pytest.raises(WorkspaceUnavailable):
+        reconcile_due_groups(m, client, date(2026, 6, 29))
+
+def test_reconcile_due_transient_warns_and_does_not_stamp():
+    m = copy.deepcopy(FIXTURE_MAP)
+    client = FakeNotionClient(fail_with={"biz-root": TransientError})
+    warnings = []
+    reconcile_due_groups(m, client, date(2026, 6, 29), warnings)
+    assert any("reconcile" in w and "ventures" in w for w in warnings)
+    assert "ventures" not in m["resolved"].get("reconciled", {})

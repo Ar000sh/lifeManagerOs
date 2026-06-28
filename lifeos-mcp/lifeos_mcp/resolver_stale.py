@@ -61,6 +61,29 @@ def reconcile_group(map: dict, client, area_key: str) -> dict:
     map["resolved"]["ignored"] = sorted(ignored)
     return summary
 
+def reconcile_due_groups(map: dict, client, today, warnings=None) -> None:
+    """Reconcile each group area at most once per calendar day (daily TTL gate)."""
+    resolved = map.setdefault("resolved", {})
+    stamps = resolved.setdefault("reconciled", {})
+    groups = resolved.get("groups", {})
+    stamp = today.isoformat()
+    for area_key, area in map.get("areas", {}).items():
+        if "group" not in area:
+            continue
+        if not groups.get(area_key):       # empty/undiscovered -> discovery handles it
+            continue
+        if stamps.get(area_key) == stamp:   # already reconciled today
+            continue
+        try:
+            reconcile_group(map, client, area_key)
+            stamps[area_key] = stamp
+        except WorkspaceUnavailable:
+            raise
+        except Exception as exc:
+            if warnings is not None:
+                warnings.append(f"reconcile {area_key} failed: {exc}")
+
+
 def drop_stale(map: dict, source_id: str) -> None:
     for area in map["resolved"]["groups"].values():
         for cid, entry in list(area.items()):
