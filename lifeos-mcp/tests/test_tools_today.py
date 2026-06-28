@@ -53,3 +53,14 @@ def test_today_calendar_failure_warns_and_empty():
     payload = get_today(m, FakeNotionClient(), BoomCal(), date(2026, 6, 27))
     assert any("calendar failed" in w for w in payload.warnings)
     assert payload.events == []
+
+def test_today_tags_tasks_with_source_label():
+    m = copy.deepcopy(FIXTURE_MAP)
+    notion = FakeNotionClient(rows={
+        "uni-tasks": [_row("Essay", "Open", "2026-06-27")],
+        "laundro-db": [_row("Call landlord", "Open", "2026-06-26")]})
+    payload = get_today(m, notion, FakeCalendarClient(), date(2026, 6, 27))
+    by_title = {t.title: t for a in payload.areas for t in a.tasks}
+    assert by_title["Call landlord"].source_label == "Laundromat Hannover"
+    assert by_title["Essay"].source_label is None
+    assert by_title["Call landlord"].to_dict()["source_label"] == "Laundromat Hannover"

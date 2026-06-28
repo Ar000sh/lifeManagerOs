@@ -35,7 +35,7 @@ def _task_rows(map, notion, source, today, warnings):
             priority=props.get(prop(sch,"priority")) if prop(sch,"priority") else None,
             due_date=due, exam_date=exam, area_label=source.area_label,
             source_id=source.source_id, overdue=bool(due and due < today),
-            url=row.get("url"))
+            url=row.get("url"), source_label=source.source_label)
         if exam:
             exams.append(rec)
         if due and due <= today:
@@ -59,7 +59,7 @@ def _shift(map, notion, source, today, warnings):
                 source_id=source.source_id)
     return None
 
-def get_today(map, notion, calendar, today: date, tz: str = "Europe/Berlin") -> TodayPayload:
+def  get_today(map, notion, calendar, today: date, tz: str = "Europe/Berlin") -> TodayPayload:
     warnings: list[str] = []
     task_sources = resolve_sources(map, notion, "tasks")
     sched_sources = resolve_sources(map, notion, "schedule")
