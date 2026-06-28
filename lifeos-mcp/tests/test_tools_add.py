@@ -15,10 +15,37 @@ def test_add_task_to_named_business_uses_schema_columns():
     assert "Name" in props and props["Name"]["title"][0]["text"]["content"] == "Order soap"
 
 def test_add_university_task_to_anchor():
+    # No area + multiple task sources (uni + laundro) is now ambiguous, not a silent pick.
     m = copy.deepcopy(FIXTURE_MAP)
     notion = FakeNotionClient()
     res = add_record(m, notion, "tasks", {"title": "Read ch.3"})
-    assert notion.created[-1][0] in ("uni-tasks", "laundro-db")  # an anchored/known tasks db
+    assert res["created"] is False
+    assert res["error"] == "ambiguous_destination"
+    assert "University" in res["candidates"]
+    assert "Laundromat Hannover" in res["candidates"]
+    assert notion.created == []   # nothing was written
+
+def test_add_ambiguous_business_returns_candidates():
+    m = copy.deepcopy(FIXTURE_MAP)
+    # add a second venture so "Business" maps to >1 candidate
+    m["resolved"]["groups"]["ventures"]["van-page"] = {
+        "label": "Van Company", "role": "tasks", "tasks_db": "van-db",
+        "cached_at": "2026-06-26"}
+    notion = FakeNotionClient()
+    res = add_record(m, notion, "tasks", {"title": "Plan"}, area="Business")
+    assert res["created"] is False
+    assert res["error"] == "ambiguous_destination"
+    assert res["candidates"] == ["Laundromat Hannover", "Van Company"]
+    assert notion.created == []
+
+def test_add_unknown_area_returns_not_found():
+    m = copy.deepcopy(FIXTURE_MAP)
+    notion = FakeNotionClient()
+    res = add_record(m, notion, "tasks", {"title": "x"}, area="Bakery")
+    assert res["created"] is False
+    assert res["error"] == "destination_not_found"
+    assert res["candidates"] == ["Laundromat Hannover", "University"]
+    assert notion.created == []
 
 def test_create_event_defaults_one_hour():
     cal = FakeCalendarClient()
