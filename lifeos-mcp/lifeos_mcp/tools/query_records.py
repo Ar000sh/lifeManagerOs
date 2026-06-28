@@ -8,8 +8,10 @@ def query_records(map, notion, role: str, filters: dict | None = None) -> list[d
     filters = filters or {}
     out = []
     for s in resolve_sources(map, notion, role):
-        if filters.get("area") and filters["area"].lower() not in s.area_label.lower():
-            continue
+        if filters.get("area"):
+            hay = [s.area_label] + ([s.source_label] if s.source_label else [])
+            if not any(filters["area"].lower() in h.lower() for h in hay):
+                continue
         sch = s.schema
         try:
             rows = notion.query_data_source(s.source_id)
@@ -25,5 +27,6 @@ def query_records(map, notion, role: str, filters: dict | None = None) -> list[d
             if filters.get("due_after") and not (due and due > date.fromisoformat(filters["due_after"])): continue
             out.append({"id": row.get("id",""), "title": props.get(prop(sch,"title")) or "",
                         "status": status, "due_date": due.isoformat() if due else None,
-                        "area": s.area_label, "source_id": s.source_id, "url": row.get("url")})
+                        "area": s.area_label, "source_label": s.source_label,
+                        "source_id": s.source_id, "url": row.get("url")})
     return out
