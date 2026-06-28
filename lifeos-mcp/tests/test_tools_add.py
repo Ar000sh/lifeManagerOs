@@ -26,3 +26,9 @@ def test_create_event_defaults_one_hour():
     assert res["created"] is True
     title, start, end, notes = cal.created[-1]
     assert end == "2026-06-27T11:00:00+02:00"
+
+def test_add_task_to_area_by_label_resolves_anchor():
+    m = copy.deepcopy(FIXTURE_MAP)
+    notion = FakeNotionClient()
+    add_record(m, notion, "tasks", {"title": "Read ch.3"}, area="University")
+    assert notion.created[-1][0] == "uni-tasks"   # area-label match -> anchored uni source
