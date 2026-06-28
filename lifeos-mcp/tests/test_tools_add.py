@@ -32,3 +32,15 @@ def test_add_task_to_area_by_label_resolves_anchor():
     notion = FakeNotionClient()
     add_record(m, notion, "tasks", {"title": "Read ch.3"}, area="University")
     assert notion.created[-1][0] == "uni-tasks"   # area-label match -> anchored uni source
+
+def test_add_to_named_business_reports_venture_destination():
+    m = copy.deepcopy(FIXTURE_MAP)
+    notion = FakeNotionClient()
+    res = add_record(m, notion, "tasks", {"title": "Order soap"}, area="Laundromat")
+    assert res["destination"] == "Laundromat Hannover"
+
+def test_add_to_anchored_area_reports_area_destination():
+    m = copy.deepcopy(FIXTURE_MAP)
+    notion = FakeNotionClient()
+    res = add_record(m, notion, "tasks", {"title": "Read ch.3"}, area="University")
+    assert res["destination"] == "University"

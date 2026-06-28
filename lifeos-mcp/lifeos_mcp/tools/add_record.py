@@ -29,4 +29,4 @@ def add_record(map, notion, role: str, fields: dict, area: str | None = None) ->
     props = build_props(sch, fields)
     page = notion.create_page(target.source_id, props)
     return {"created": True, "id": page.get("id"), "url": page.get("url"),
-            "destination": target.area_label}
+            "destination": target.source_label or target.area_label}
