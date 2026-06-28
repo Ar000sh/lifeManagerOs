@@ -131,6 +131,7 @@ dependencies = [
   "google-api-python-client>=2.0",
   "google-auth>=2.0",
   "google-auth-oauthlib>=1.0",
+  "tzdata>=2024.1",
 ]
 
 [project.optional-dependencies]
@@ -932,12 +933,6 @@ def _raise_for_status(resp: httpx.Response):
     if resp.status_code == 429 or resp.status_code >= 500: raise TransientError(str(resp.status_code))
     resp.raise_for_status()
 
-def _title_of(page: dict) -> str:
-    for v in page.get("properties", {}).values():
-        if v.get("type") == "title":
-            return "".join(t.get("plain_text", "") for t in v.get("title", []))
-    return page.get("id", "")
-
 def extract_props(page: dict) -> dict:
     out = {}
     for name, v in page.get("properties", {}).items():
@@ -963,9 +958,7 @@ def build_props(schema: dict, fields: dict) -> dict:
             continue
         if role == "title":
             props[col] = {"title": [{"text": {"content": str(value)}}]}
-        elif role in ("status",):
-            props[col] = {"select": {"name": str(value)}}
-        elif role == "priority":
+        elif role in ("status", "priority"):
             props[col] = {"select": {"name": str(value)}}
         elif role in ("due_date", "exam_date"):
             props[col] = {"date": {"start": str(value)}}
@@ -1179,7 +1172,8 @@ Expected: FAIL (`ModuleNotFoundError`).
 - [ ] **Step 3: Implement `tools/get_today.py`** (create empty `tools/__init__.py` too)
 
 ```python
-from datetime import date
+from datetime import date, datetime, time
+from zoneinfo import ZoneInfo
 from ..models import TaskRecord, ScheduleRecord, EventRecord, AreaBlock, TodayPayload
 from ..resolver_areas import resolve_sources, iter_areas
 from ..resolver_schema import prop, is_done
@@ -1187,6 +1181,13 @@ from ..notion_client import extract_props
 
 def _to_date(s):
     return date.fromisoformat(s[:10]) if s else None
+
+def _day_window(d: date, tz: str) -> tuple[str, str]:
+    """RFC3339 start/end bounds for the local day in `tz`, so the calendar
+    window matches the user's day rather than UTC."""
+    zone = ZoneInfo(tz)
+    return (datetime.combine(d, time.min, zone).isoformat(),
+            datetime.combine(d, time.max, zone).isoformat())
 
 def _task_rows(map, notion, source, today, warnings):
     tasks, exams = [], []
@@ -1232,7 +1233,7 @@ def _shift(map, notion, source, today, warnings):
                 source_id=source.source_id)
     return None
 
-def get_today(map, notion, calendar, today: date) -> TodayPayload:
+def get_today(map, notion, calendar, today: date, tz: str = "Europe/Berlin") -> TodayPayload:
     warnings: list[str] = []
     task_sources = resolve_sources(map, notion, "tasks")
     sched_sources = resolve_sources(map, notion, "schedule")
@@ -1248,7 +1249,7 @@ def get_today(map, notion, calendar, today: date) -> TodayPayload:
             blocks.append(AreaBlock(area["label"], area["emoji"], a_tasks, a_exams, a_shift))
     events = []
     try:
-        tmin, tmax = f"{today.isoformat()}T00:00:00Z", f"{today.isoformat()}T23:59:59Z"
+        tmin, tmax = _day_window(today, tz)
         events = [EventRecord(**e) for e in calendar.list_events(tmin, tmax)]
     except Exception as exc:
         warnings.append(f"calendar failed: {exc}")
@@ -1316,13 +1317,13 @@ from ..models import EventRecord, WeekPayload
 from ..resolver_areas import resolve_sources
 from ..resolver_schema import prop, is_done
 from ..notion_client import extract_props
-from .get_today import _to_date
+from .get_today import _to_date, _day_window
 
 def week_bounds(today: date) -> tuple[date, date]:
     start = today - timedelta(days=today.weekday())  # Monday
     return start, start + timedelta(days=6)
 
-def get_week(map, notion, calendar, today: date) -> WeekPayload:
+def get_week(map, notion, calendar, today: date, tz: str = "Europe/Berlin") -> WeekPayload:
     start, end = week_bounds(today)
     warnings: list[str] = []
     buckets: dict[str, dict] = {}
@@ -1364,7 +1365,7 @@ def get_week(map, notion, calendar, today: date) -> WeekPayload:
                     "end": props.get(prop(sch,"end")) if prop(sch,"end") else None}
 
     try:
-        evs = calendar.list_events(f"{start.isoformat()}T00:00:00Z", f"{end.isoformat()}T23:59:59Z")
+        evs = calendar.list_events(_day_window(start, tz)[0], _day_window(end, tz)[1])
         for e in evs:
             d = _to_date(e["start"])
             if d: bucket(d)["events"].append(EventRecord(**e).to_dict())
@@ -1659,7 +1660,7 @@ def build_app(settings: Settings, notion=None, calendar=None) -> FastMCP:
         """Today's tasks, exams, work shift, and calendar events across all areas."""
         m = load_map(settings.map_path)
         try:
-            payload = get_today(m, _notion(), _calendar(), _today())
+            payload = get_today(m, _notion(), _calendar(), _today(), settings.tz)
         except WorkspaceUnavailable:
             return {"error": "reconnect_notion"}
         save_map(m, settings.map_path)
@@ -1670,7 +1671,7 @@ def build_app(settings: Settings, notion=None, calendar=None) -> FastMCP:
         """This week's tasks, deadlines, shifts, and events (Mon–Sun)."""
         m = load_map(settings.map_path)
         try:
-            payload = get_week(m, _notion(), _calendar(), _today())
+            payload = get_week(m, _notion(), _calendar(), _today(), settings.tz)
         except WorkspaceUnavailable:
             return {"error": "reconnect_notion"}
         save_map(m, settings.map_path)

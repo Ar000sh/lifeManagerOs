@@ -32,3 +32,24 @@ def test_today_partial_failure_warns_not_aborts():
     payload = get_today(m, notion, cal, date(2026, 6, 27))
     assert any("laundro-db" in w for w in payload.warnings)
     assert any(t.title == "Essay" for a in payload.areas for t in a.tasks)
+
+def test_today_calendar_window_uses_berlin_offset():
+    import copy
+    from datetime import date
+    m = copy.deepcopy(FIXTURE_MAP)
+    cal = FakeCalendarClient()
+    get_today(m, FakeNotionClient(), cal, date(2026, 6, 27))  # default tz Europe/Berlin (CEST, +02:00 in summer)
+    tmin, tmax = cal.list_calls[-1]
+    assert tmin.startswith("2026-06-27T00:00:00")
+    assert tmin.endswith("+02:00")   # Berlin summer offset, not UTC 'Z'
+
+def test_today_calendar_failure_warns_and_empty():
+    import copy
+    from datetime import date
+    m = copy.deepcopy(FIXTURE_MAP)
+    class BoomCal:
+        def list_events(self, a, b):
+            raise RuntimeError("cal down")
+    payload = get_today(m, FakeNotionClient(), BoomCal(), date(2026, 6, 27))
+    assert any("calendar failed" in w for w in payload.warnings)
+    assert payload.events == []

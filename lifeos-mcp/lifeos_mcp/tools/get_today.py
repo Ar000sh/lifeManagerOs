@@ -1,4 +1,5 @@
-from datetime import date
+from datetime import date, datetime, time
+from zoneinfo import ZoneInfo
 from ..models import TaskRecord, ScheduleRecord, EventRecord, AreaBlock, TodayPayload
 from ..resolver_areas import resolve_sources, iter_areas
 from ..resolver_schema import prop, is_done
@@ -6,6 +7,13 @@ from ..notion_client import extract_props
 
 def _to_date(s):
     return date.fromisoformat(s[:10]) if s else None
+
+def _day_window(d: date, tz: str) -> tuple[str, str]:
+    """RFC3339 start/end bounds for the local day in `tz`, so the calendar
+    window matches the user's day rather than UTC."""
+    zone = ZoneInfo(tz)
+    return (datetime.combine(d, time.min, zone).isoformat(),
+            datetime.combine(d, time.max, zone).isoformat())
 
 def _task_rows(map, notion, source, today, warnings):
     tasks, exams = [], []
@@ -51,7 +59,7 @@ def _shift(map, notion, source, today, warnings):
                 source_id=source.source_id)
     return None
 
-def get_today(map, notion, calendar, today: date) -> TodayPayload:
+def get_today(map, notion, calendar, today: date, tz: str = "Europe/Berlin") -> TodayPayload:
     warnings: list[str] = []
     task_sources = resolve_sources(map, notion, "tasks")
     sched_sources = resolve_sources(map, notion, "schedule")
@@ -67,7 +75,7 @@ def get_today(map, notion, calendar, today: date) -> TodayPayload:
             blocks.append(AreaBlock(area["label"], area["emoji"], a_tasks, a_exams, a_shift))
     events = []
     try:
-        tmin, tmax = f"{today.isoformat()}T00:00:00Z", f"{today.isoformat()}T23:59:59Z"
+        tmin, tmax = _day_window(today, tz)
         events = [EventRecord(**e) for e in calendar.list_events(tmin, tmax)]
     except Exception as exc:
         warnings.append(f"calendar failed: {exc}")

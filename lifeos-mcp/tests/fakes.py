@@ -37,7 +37,9 @@ class FakeCalendarClient:
     def __init__(self, events=None):
         self.events = events or []
         self.created = []
+        self.list_calls = []
     def list_events(self, time_min, time_max):
+        self.list_calls.append((time_min, time_max))
         return self.events
     def create_event(self, title, start, end, notes=None):
         rec = {"id": f"ev-{len(self.created)}", "htmlLink": "http://cal/ev"}
