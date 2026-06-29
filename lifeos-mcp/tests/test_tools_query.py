@@ -1,6 +1,6 @@
 import copy
 from lifeos_mcp.tools.query_records import query_records
-from tests.fixtures.maps import LEGACY_FIXTURE_MAP as FIXTURE_MAP
+from tests.fixtures.maps import FIXTURE_MAP
 from tests.fakes import FakeNotionClient
 
 def _row(title, status, due):
