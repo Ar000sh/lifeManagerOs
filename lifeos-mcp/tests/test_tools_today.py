@@ -2,7 +2,7 @@
 import copy
 from datetime import date
 from lifeos_mcp.tools.get_today import get_today
-from tests.fixtures.maps import FIXTURE_MAP
+from tests.fixtures.maps import LEGACY_FIXTURE_MAP as FIXTURE_MAP
 from tests.fakes import FakeNotionClient, FakeCalendarClient
 
 def _row(title, status, due):

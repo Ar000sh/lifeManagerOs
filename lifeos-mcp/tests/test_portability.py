@@ -2,7 +2,7 @@
 import copy
 from datetime import date
 from lifeos_mcp.tools.get_today import get_today
-from tests.fixtures.maps import ALT_MAP
+from tests.fixtures.maps import LEGACY_ALT_MAP as ALT_MAP
 from tests.fakes import FakeNotionClient, FakeCalendarClient
 
 def test_alt_map_today_uses_german_columns_and_checkbox_done():
@@ -23,7 +23,7 @@ def test_alt_map_today_uses_german_columns_and_checkbox_done():
     assert any(a.label == "Persönlich" for a in payload.areas)  # map-driven label
 
 def test_alt_map_tags_discovered_venture_source_label():
-    from tests.fixtures.maps import ALT_MAP
+    from tests.fixtures.maps import LEGACY_ALT_MAP as ALT_MAP
     m = copy.deepcopy(ALT_MAP)
     row = {"id": "c1", "url": "u", "properties": {
         "Name": {"type": "title", "title": [{"plain_text": "Call client"}]},

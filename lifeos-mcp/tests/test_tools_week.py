@@ -2,7 +2,7 @@
 import copy
 from datetime import date
 from lifeos_mcp.tools.get_week import get_week, week_bounds
-from tests.fixtures.maps import FIXTURE_MAP
+from tests.fixtures.maps import LEGACY_FIXTURE_MAP as FIXTURE_MAP
 from tests.fakes import FakeNotionClient, FakeCalendarClient
 
 def test_week_bounds_monday_sunday():

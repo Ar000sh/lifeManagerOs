@@ -1,7 +1,7 @@
 import copy
 from lifeos_mcp.tools.add_record import add_record
 from lifeos_mcp.tools.create_event import create_event
-from tests.fixtures.maps import FIXTURE_MAP
+from tests.fixtures.maps import LEGACY_FIXTURE_MAP as FIXTURE_MAP
 from tests.fakes import FakeNotionClient, FakeCalendarClient
 
 def test_add_task_to_named_business_uses_schema_columns():
