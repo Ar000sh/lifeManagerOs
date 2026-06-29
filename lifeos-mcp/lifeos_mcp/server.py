@@ -28,7 +28,7 @@ def build_app(settings: Settings, notion=None, calendar=None) -> FastMCP:
 
     @app.tool(name="get_today")
     def get_today_tool() -> dict:
-        """Today's tasks, exams, work shift, and calendar events across all areas."""
+        """Today's tasks, key dates, work shift, and calendar events across all areas."""
         m = load_map(settings.map_path)
         try:
             payload = get_today(m, _notion(), _calendar(), _today(), settings.tz)

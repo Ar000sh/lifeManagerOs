@@ -29,20 +29,6 @@ class Record:
                 "url": self.url}
 
 @dataclass
-class TaskRecord:
-    id: str; title: str; status: str | None; priority: str | None
-    due_date: date | None; exam_date: date | None; area_label: str
-    source_id: str; overdue: bool; url: str | None; catalog: str | None = None
-    source_label: str | None = None
-    def to_dict(self) -> dict:
-        return {"id": self.id, "title": self.title, "status": self.status,
-                "priority": self.priority, "due_date": _iso(self.due_date),
-                "exam_date": _iso(self.exam_date), "area_label": self.area_label,
-                "source_id": self.source_id, "overdue": self.overdue,
-                "url": self.url, "catalog": self.catalog,
-                "source_label": self.source_label}
-
-@dataclass
 class ScheduleRecord:
     id: str; title: str; date: date | None; start: str | None; end: str | None; source_id: str
     def to_dict(self) -> dict:
