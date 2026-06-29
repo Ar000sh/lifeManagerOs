@@ -29,6 +29,14 @@ def test_extract_props_reads_select_and_date():
     assert props["Due Date"] == "2026-06-27"
     assert props["Done?"] is True
 
+def test_extract_props_reads_number_and_relation():
+    page = {"properties": {
+        "Estimate": {"type": "number", "number": 3.5},
+        "Module": {"type": "relation", "relation": [{"id": "mod-1"}, {"id": "mod-2"}]}}}
+    props = extract_props(page)
+    assert props["Estimate"] == 3.5
+    assert props["Module"] == ["mod-1", "mod-2"]
+
 def test_retrieve_403_maps_to_auth():
     import pytest, httpx
     from lifeos_mcp.errors import NotionAuthError

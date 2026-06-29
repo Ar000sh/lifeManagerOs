@@ -29,6 +29,10 @@ def extract_props(page: dict) -> dict:
             out[name] = "".join(x.get("plain_text", "") for x in v.get("title", []))
         elif t == "rich_text":
             out[name] = "".join(x.get("plain_text", "") for x in v.get("rich_text", []))
+        elif t == "number":
+            out[name] = v.get("number")
+        elif t == "relation":
+            out[name] = [r.get("id") for r in v.get("relation", [])]
     return out
 
 def build_props(schema: dict, fields: dict) -> dict:
