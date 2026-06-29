@@ -63,12 +63,12 @@ class CatalogRecord:
 
 @dataclass
 class AreaBlock:
-    label: str; emoji: str; tasks: list[TaskRecord]
-    exams: list[TaskRecord]; shift: ScheduleRecord | None
+    label: str; emoji: str; tasks: list
+    key_dates: list; shift: ScheduleRecord | None
     def to_dict(self) -> dict:
         return {"label": self.label, "emoji": self.emoji,
                 "tasks": [t.to_dict() for t in self.tasks],
-                "exams": [e.to_dict() for e in self.exams],
+                "key_dates": self.key_dates,
                 "shift": self.shift.to_dict() if self.shift else None}
 
 @dataclass

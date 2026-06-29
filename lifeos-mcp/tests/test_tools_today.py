@@ -2,7 +2,7 @@
 import copy
 from datetime import date
 from lifeos_mcp.tools.get_today import get_today
-from tests.fixtures.maps import LEGACY_FIXTURE_MAP as FIXTURE_MAP
+from tests.fixtures.maps import FIXTURE_MAP
 from tests.fakes import FakeNotionClient, FakeCalendarClient
 
 def _row(title, status, due):
@@ -135,3 +135,27 @@ def test_today_d_self_heals_deleted_venture_after_daily_reconcile():
     assert any(t.title == "Essay" for a in p.areas for t in a.tasks)     # briefing survives
     assert "laundro-page" not in m["resolved"]["groups"]["ventures"]      # D tombstoned it
     assert "laundro-page" in m["resolved"]["tombstones"]
+
+def _row_exam(title, status, due, exam):
+    r = _row(title, status, due)
+    r["properties"]["Exam Date"] = {"type": "date", "date": {"start": exam}}
+    return r
+
+def test_today_surfaces_key_dates_not_exams():
+    m = copy.deepcopy(FIXTURE_MAP)
+    m.setdefault("resolved", {}).setdefault("reconciled", {})["ventures"] = "2026-06-27"
+    notion = FakeNotionClient(rows={
+        "uni-tasks": [_row_exam("ML", "Open", "2026-06-27", "2026-07-10")]})
+    p = get_today(m, notion, FakeCalendarClient(), date(2026, 6, 27))
+    kds = [kd for a in p.areas for kd in a.key_dates]
+    assert {"title": "ML", "label": "Exam Date", "date": "2026-07-10"} in kds
+
+def test_today_flags_missing_required_due_date():
+    m = copy.deepcopy(FIXTURE_MAP)
+    m.setdefault("resolved", {}).setdefault("reconciled", {})["ventures"] = "2026-06-27"
+    bad = {"id": "x", "url": "u", "properties": {
+        "Name": {"type": "title", "title": [{"plain_text": "No date"}]},
+        "Status": {"type": "select", "select": {"name": "Open"}}}}
+    notion = FakeNotionClient(rows={"uni-tasks": [bad]})
+    p = get_today(m, notion, FakeCalendarClient(), date(2026, 6, 27))
+    assert any("missing required due_date" in w for w in p.warnings)

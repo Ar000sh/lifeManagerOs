@@ -11,7 +11,7 @@ def test_task_to_dict_serializes_date():
 
 def test_today_payload_to_dict_nested():
     p = TodayPayload(date=date(2026, 6, 27),
-                     areas=[AreaBlock(label="Work", emoji="💼", tasks=[], exams=[], shift=None)],
+                     areas=[AreaBlock(label="Work", emoji="💼", tasks=[], key_dates=[], shift=None)],
                      events=[], warnings=[])
     d = p.to_dict()
     assert d["date"] == "2026-06-27"
