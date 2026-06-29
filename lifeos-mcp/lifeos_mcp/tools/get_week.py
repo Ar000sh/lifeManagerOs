@@ -1,7 +1,7 @@
 from datetime import date, timedelta
 from ..models import EventRecord, WeekPayload
 from ..resolver_areas import resolve_sources
-from ..resolver_schema import prop, is_done
+from ..resolver_schema import col, is_complete, week_match, key_date_fields
 from ..notion_client import extract_props
 from ..resolver_stale import reconcile_due_groups, reconcile_group
 from ..errors import NotionNotFound, WorkspaceUnavailable
@@ -17,7 +17,7 @@ def get_week(map, notion, calendar, today: date, tz: str = "Europe/Berlin") -> W
     reconcile_due_groups(map, notion, today, warnings)
     buckets: dict[str, dict] = {}
     def bucket(d): return buckets.setdefault(d.isoformat(),
-        {"date": d.isoformat(), "tasks": [], "exams": [], "shift": None, "events": []})
+        {"date": d.isoformat(), "tasks": [], "key_dates": [], "shift": None, "events": []})
 
     stale_groups: set[str] = set()
     for s in resolve_sources(map, notion, "tasks", warnings):
@@ -29,19 +29,26 @@ def get_week(map, notion, calendar, today: date, tz: str = "Europe/Berlin") -> W
                 stale_groups.add(s.area_key)
             continue
         sch = s.schema
-        tw = (sch.get("status_values") or {}).get("this_week")
+        title_col, due_col, status_col = col(sch, "title"), col(sch, "due_date"), col(sch, "status")
+        kd_fields = key_date_fields(sch)
         for row in rows:
             props = extract_props(row)
-            if is_done(sch, props): continue
-            due = _to_date(props.get(prop(sch,"due_date"))) if prop(sch,"due_date") else None
-            exam = _to_date(props.get(prop(sch,"exam_date"))) if prop(sch,"exam_date") else None
-            title = props.get(prop(sch,"title")) or ""
-            status = props.get(prop(sch,"status")) if prop(sch,"status") else None
+            if is_complete(sch, props):
+                continue
+            due = _to_date(props.get(due_col)) if due_col else None
+            title = props.get(title_col) or ""
+            status = props.get(status_col) if status_col else None
             item = {"title": title, "area": s.area_label, "source_label": s.source_label,
                     "status": status, "due_date": due.isoformat() if due else None}
-            if exam and start <= exam <= end: bucket(exam)["exams"].append(item)
-            if due and start <= due <= end: bucket(due)["tasks"].append(item)
-            elif tw and status == tw: bucket(start)["tasks"].append(item)
+            for k, d in kd_fields:
+                kv = _to_date(props.get(d["col"]))
+                if kv and start <= kv <= end:
+                    bucket(kv)["key_dates"].append({**item, "label": d["col"],
+                                                    "date": kv.isoformat()})
+            if due and start <= due <= end:
+                bucket(due)["tasks"].append(item)
+            elif week_match(sch, props):
+                bucket(start)["tasks"].append(item)
 
     for s in resolve_sources(map, notion, "schedule", warnings):
         try:
@@ -51,11 +58,11 @@ def get_week(map, notion, calendar, today: date, tz: str = "Europe/Berlin") -> W
         sch = s.schema
         for row in rows:
             props = extract_props(row)
-            d = _to_date(props.get(prop(sch,"date"))) if prop(sch,"date") else None
+            d = _to_date(props.get(col(sch, "date"))) if col(sch, "date") else None
             if d and start <= d <= end:
-                bucket(d)["shift"] = {"title": props.get(prop(sch,"title")) or "",
-                    "start": props.get(prop(sch,"start")) if prop(sch,"start") else None,
-                    "end": props.get(prop(sch,"end")) if prop(sch,"end") else None}
+                bucket(d)["shift"] = {"title": props.get(col(sch, "title")) or "",
+                    "start": props.get(col(sch, "start")) if col(sch, "start") else None,
+                    "end": props.get(col(sch, "end")) if col(sch, "end") else None}
 
     for area_key in stale_groups:
         try:
@@ -75,6 +82,6 @@ def get_week(map, notion, calendar, today: date, tz: str = "Europe/Berlin") -> W
 
     days = [buckets[k] for k in sorted(buckets)]
     summary = {"tasks": sum(len(d["tasks"]) for d in days),
-               "exams": sum(len(d["exams"]) for d in days),
+               "key_dates": sum(len(d["key_dates"]) for d in days),
                "shifts": sum(1 for d in days if d["shift"])}
     return WeekPayload(start=start, end=end, days=days, summary=summary, warnings=warnings)
