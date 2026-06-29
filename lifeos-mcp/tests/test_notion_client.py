@@ -58,15 +58,20 @@ def test_retrieve_500_maps_to_transient():
     with pytest.raises(TransientError):
         c.retrieve("x")
 
-def test_build_props_skips_none_and_maps_types():
+def test_build_props_typed_and_skips_none_and_relation():
     from lifeos_mcp.notion_client import build_props
-    schema = {"title": "Name", "status": "Status", "due_date": "Due Date", "notes": "Notes"}
+    schema = {"role": "tasks",
+              "title": {"col": "Name", "type": "title"},
+              "due_date": {"col": "Due Date", "type": "date"},
+              "fields": {"status": {"col": "Status", "type": "status"},
+                         "module": {"col": "Module", "type": "relation"},
+                         "notes": {"col": "Notes", "type": "rich_text"}}}
     out = build_props(schema, {"title": "Buy soap", "status": "Open",
-                               "due_date": "2026-07-01", "notes": None,
-                               "missing_role": "x"})
+                               "due_date": "2026-07-01", "module": ["mod-1"],
+                               "notes": None, "missing_role": "x"})
     assert out["Name"]["title"][0]["text"]["content"] == "Buy soap"
-    assert out["Status"]["select"]["name"] == "Open"
+    assert out["Status"]["status"]["name"] == "Open"
     assert out["Due Date"]["date"]["start"] == "2026-07-01"
-    assert "Notes" not in out          # None skipped
-    # a role with no column in the schema is skipped silently
-    assert all(k in ("Name", "Status", "Due Date") for k in out)
+    assert out["Module"]["relation"] == [{"id": "mod-1"}]
+    assert "Notes" not in out                       # None skipped
+    assert "missing_role" not in out and len(out) == 4

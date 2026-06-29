@@ -1,5 +1,5 @@
 from ..resolver_areas import resolve_sources
-from ..resolver_schema import prop
+from ..resolver_schema import col, required_core
 from ..notion_client import build_props
 
 def _label(s):
@@ -28,7 +28,10 @@ def add_record(map, notion, role: str, fields: dict, area: str | None = None) ->
     target = candidates[0]
     sch = target.schema
     fields = dict(fields)
-    if prop(sch, "priority") and "priority" not in fields:
+    missing = [k for k in required_core(sch) if k not in fields]
+    if missing:
+        return {"created": False, "error": "missing_required", "fields": missing}
+    if col(sch, "priority") and "priority" not in fields:
         fields["priority"] = "Medium"
     props = build_props(sch, fields)
     page = notion.create_page(target.source_id, props)

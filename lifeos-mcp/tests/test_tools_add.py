@@ -1,7 +1,7 @@
 import copy
 from lifeos_mcp.tools.add_record import add_record
 from lifeos_mcp.tools.create_event import create_event
-from tests.fixtures.maps import LEGACY_FIXTURE_MAP as FIXTURE_MAP
+from tests.fixtures.maps import FIXTURE_MAP
 from tests.fakes import FakeNotionClient, FakeCalendarClient
 
 def test_add_task_to_named_business_uses_schema_columns():
@@ -57,17 +57,26 @@ def test_create_event_defaults_one_hour():
 def test_add_task_to_area_by_label_resolves_anchor():
     m = copy.deepcopy(FIXTURE_MAP)
     notion = FakeNotionClient()
-    add_record(m, notion, "tasks", {"title": "Read ch.3"}, area="University")
+    add_record(m, notion, "tasks", {"title": "Read ch.3", "due_date": "2026-07-01"}, area="University")
     assert notion.created[-1][0] == "uni-tasks"   # area-label match -> anchored uni source
 
 def test_add_to_named_business_reports_venture_destination():
     m = copy.deepcopy(FIXTURE_MAP)
     notion = FakeNotionClient()
-    res = add_record(m, notion, "tasks", {"title": "Order soap"}, area="Laundromat")
+    res = add_record(m, notion, "tasks", {"title": "Order soap", "due_date": "2026-07-01"}, area="Laundromat")
     assert res["destination"] == "Laundromat Hannover"
 
 def test_add_to_anchored_area_reports_area_destination():
     m = copy.deepcopy(FIXTURE_MAP)
     notion = FakeNotionClient()
-    res = add_record(m, notion, "tasks", {"title": "Read ch.3"}, area="University")
+    res = add_record(m, notion, "tasks", {"title": "Read ch.3", "due_date": "2026-07-01"}, area="University")
     assert res["destination"] == "University"
+
+def test_add_refuses_missing_required_due_date():
+    m = copy.deepcopy(FIXTURE_MAP)
+    notion = FakeNotionClient()
+    res = add_record(m, notion, "tasks", {"title": "No date"}, area="University")
+    assert res["created"] is False
+    assert res["error"] == "missing_required"
+    assert res["fields"] == ["due_date"]
+    assert notion.created == []

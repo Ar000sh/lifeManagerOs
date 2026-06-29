@@ -1,6 +1,7 @@
 from typing import Protocol
 import httpx
 from .errors import NotionNotFound, NotionAuthError, TransientError
+from .resolver_schema import field_def
 
 class NotionClient(Protocol):
     def get_block_children(self, block_id: str) -> list[dict]: ...
@@ -35,21 +36,27 @@ def extract_props(page: dict) -> dict:
             out[name] = [r.get("id") for r in v.get("relation", [])]
     return out
 
+TYPE_BUILDERS = {
+    "title":     lambda v: {"title": [{"text": {"content": str(v)}}]},
+    "date":      lambda v: {"date": {"start": str(v)}},
+    "select":    lambda v: {"select": {"name": str(v)}},
+    "status":    lambda v: {"status": {"name": str(v)}},
+    "checkbox":  lambda v: {"checkbox": bool(v)},
+    "number":    lambda v: {"number": v},
+    "relation":  lambda v: {"relation": [{"id": i} for i in v]},
+    "rich_text": lambda v: {"rich_text": [{"text": {"content": str(v)}}]},
+}
+
 def build_props(schema: dict, fields: dict) -> dict:
-    """Map python field values -> Notion property payloads using the schema."""
+    """Build Notion property payloads from each field's declared type."""
     props = {}
-    for role, value in fields.items():
-        col = schema.get(role)
-        if not col or value is None:
+    for key, value in fields.items():
+        d = field_def(schema, key)
+        if not d or value is None:
             continue
-        if role == "title":
-            props[col] = {"title": [{"text": {"content": str(value)}}]}
-        elif role in ("status", "priority"):
-            props[col] = {"select": {"name": str(value)}}
-        elif role in ("due_date", "exam_date"):
-            props[col] = {"date": {"start": str(value)}}
-        else:
-            props[col] = {"rich_text": [{"text": {"content": str(value)}}]}
+        builder = TYPE_BUILDERS.get(d.get("type"))
+        if builder:
+            props[d["col"]] = builder(value)
     return props
 
 class HttpxNotionClient:
