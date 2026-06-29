@@ -6,6 +6,29 @@ def _iso(d: date | None) -> str | None:
     return d.isoformat() if d else None
 
 @dataclass
+class KeyDate:
+    label: str; date: date
+    def to_dict(self) -> dict:
+        return {"label": self.label, "date": _iso(self.date)}
+
+@dataclass
+class Record:
+    id: str; role: str; title: str
+    due_date: date | None; overdue: bool
+    area_label: str; source_id: str
+    key_dates: list = field(default_factory=list)
+    fields: dict = field(default_factory=dict)
+    source_label: str | None = None
+    url: str | None = None
+    def to_dict(self) -> dict:
+        return {"id": self.id, "role": self.role, "title": self.title,
+                "due_date": _iso(self.due_date), "overdue": self.overdue,
+                "area_label": self.area_label, "source_id": self.source_id,
+                "key_dates": [k.to_dict() for k in self.key_dates],
+                "fields": self.fields, "source_label": self.source_label,
+                "url": self.url}
+
+@dataclass
 class TaskRecord:
     id: str; title: str; status: str | None; priority: str | None
     due_date: date | None; exam_date: date | None; area_label: str
