@@ -27,6 +27,11 @@ def resolve_sources(map: dict, client, role: str, warnings=None) -> list[Resolve
             # only in `anchors`); the resolved id `sid` is used only for queries.
             out.append(ResolvedSource(sid, role, key, label, emoji,
                                       schema_for(map, src["anchor"], role)))
+        catalog = area.get("catalog")
+        if catalog and catalog.get("role") == role:
+            sid = _anchor_id(map, catalog["anchor"])
+            out.append(ResolvedSource(sid, role, key, label, emoji,
+                                      schema_for(map, catalog["anchor"], role)))
         group = area.get("group")
         if group and any(cs.get("role") == role for cs in group.get("child_sources", [])):
             for sid, label_ in _resolve_group(map, client, key, group, role, warnings):

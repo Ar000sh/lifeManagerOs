@@ -74,11 +74,15 @@ def get_week(map, notion, calendar, today: date, tz: str = "Europe/Berlin") -> W
 
     try:
         evs = calendar.list_events(_day_window(start, tz)[0], _day_window(end, tz)[1])
-        for e in evs:
-            d = _to_date(e["start"])
-            if d: bucket(d)["events"].append(EventRecord(**e).to_dict())
     except Exception as exc:
         warnings.append(f"calendar failed: {exc}")
+        evs = []
+    for e in evs:
+        try:
+            d = _to_date(e["start"])
+            if d: bucket(d)["events"].append(EventRecord(**e).to_dict())
+        except Exception as exc:
+            warnings.append(f"calendar event {e.get('id', '?')} failed: {exc}")
 
     days = [buckets[k] for k in sorted(buckets)]
     summary = {"tasks": sum(len(d["tasks"]) for d in days),

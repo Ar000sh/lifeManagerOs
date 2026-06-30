@@ -5,6 +5,10 @@ from ..notion_client import build_props
 def _label(s):
     return s.source_label or s.area_label
 
+def _blank(v):
+    """A required value is missing if absent, None, or an empty/whitespace string."""
+    return v is None or (isinstance(v, str) and not v.strip())
+
 def add_record(map, notion, role: str, fields: dict, area: str | None = None) -> dict:
     sources = resolve_sources(map, notion, role)
     if not sources:
@@ -28,7 +32,7 @@ def add_record(map, notion, role: str, fields: dict, area: str | None = None) ->
     target = candidates[0]
     sch = target.schema
     fields = dict(fields)
-    missing = [k for k in required_core(sch) if k not in fields]
+    missing = [k for k in required_core(sch) if _blank(fields.get(k))]
     if missing:
         return {"created": False, "error": "missing_required", "fields": missing}
     if col(sch, "priority") and "priority" not in fields:
