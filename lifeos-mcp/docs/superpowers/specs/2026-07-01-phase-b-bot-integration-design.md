@@ -25,7 +25,7 @@ workspace, and the schema/key-date behavior built in Phase A is what actually ru
 | 2 | 🔴 blocker | `/refresh-notion` still emits old-shape; can't regenerate a usable map. |
 | 3 | 🟠 | `/today` `/week` `/add` skills still resolve Notion themselves; must thin onto tools. |
 | 4 | 🟠 | lifeos must be registered **programmatically** (project `.mcp.json` is skipped headless). |
-| 5 | 🟡 | `lifeos_mcp` + deps must be importable in the bot venv and the Docker image. |
+| 5 | 🟡 | `lifeos_mcp` + deps importable in the bot runtime; **map persistence** moves to identity-keyed Azure Blob (new infra + app store). |
 
 ## Current architecture (as-is)
 
@@ -130,25 +130,65 @@ names, no resolution logic.
 - In `build_options()`, add a **third programmatic** stdio MCP server:
   `command = python` (the bot's interpreter), `args = ["-m", "lifeos_mcp.server"]`,
   `env = {NOTION_TOKEN, GOOGLE_OAUTH_CREDENTIALS, GOOGLE_CALENDAR_MCP_TOKEN_PATH,
-  LIFEOS_MAP_PATH}` (and optionally a TZ if non-default). These env vars already exist in
-  the bot environment; the lifeos `Settings` reads exactly these names.
+  LIFEOS_IDENTITY, LIFEOS_MAP_STORE, LIFEOS_BLOB_ACCOUNT_URL, LIFEOS_MAP_CONTAINER}`
+  (and optionally a TZ if non-default). The token env vars already exist in the bot
+  environment; the persistence vars are new (see "Map persistence" below).
+- **Thread the chat id through.** `run_agent(prompt)` / `LiveAgentClient` must learn the
+  Telegram **chat id** (known to `bot.py`, currently locked to `1672283963`) and pass it as
+  `LIFEOS_IDENTITY` in the spawned server's env, so the server loads/saves that identity's
+  map. Today that's one value; later it becomes the per-user id.
 - Add `"mcp__lifeos"` to `allowed_tools`.
 - **Do not rely on project `.mcp.json` for the bot** — `agent_runner.py` documents that
   project `.mcp.json` servers are silently skipped in headless SDK runs. A `.mcp.json` entry
   is still worth adding **only** so interactive Claude Code (desktop/CLI) sees the same
   tools; it has no effect on the running bot.
-- `LIFEOS_MAP_PATH` default already resolves to `lifeMg/context/lifeos.map.json` via the
-  package path; set it explicitly anyway for clarity and Docker.
 
-## Gap 5 — Runtime dependencies & Docker
+## Map persistence — identity-keyed Azure Blob
+
+The map stops being a single local file and becomes **one object per identity** in durable
+cloud storage, so it survives VM rebuilds and is forward-compatible with multi-user.
+
+**Identity.** The store key is the **Telegram chat id** now (`LIFEOS_IDENTITY`), the
+**user id** later — same interface, different key.
+
+**App layer (`lifeos-mcp`).** Introduce a small `MapStore` abstraction; `config.py` /
+`server.py` stop calling `load_map(path)`/`save_map(path)` directly and instead use
+`store.load(identity)` / `store.save(identity, data)`:
+- `FileMapStore` — local dev: `…/maps/{identity}.json` on disk (default when
+  `LIFEOS_MAP_STORE != "blob"`).
+- `AzureBlobMapStore` — production: blob `{identity}.json` in container
+  `LIFEOS_MAP_CONTAINER` of account `LIFEOS_BLOB_ACCOUNT_URL`. Auth via
+  `azure-identity` `DefaultAzureCredential` → the VM's **system-assigned managed identity**
+  (no secrets in env or Key Vault). New deps: `azure-identity`, `azure-storage-blob`.
+- Selected by `LIFEOS_MAP_STORE = file | blob`.
+- *Concurrency note:* read-modify-write per tool call (the `resolved` cache self-heals on
+  read). Single-user + sequential bot handling makes races unlikely; ETag-based optimistic
+  concurrency is a future hardening, not v1.
+
+**Infra layer (`infra/`, ships through the gated CI/CD pipeline; Claude writes the files +
+commands, Aroosh approves/applies — never `terraform apply` on his behalf).** Add a new
+`infra/storage.tf` with its `infra/doc/storage.tf.md` explainer (per the docs rule):
+- A **new** app-data storage account in `azurerm_resource_group.main` (do **not** reuse the
+  tfstate account `stlifeostf18906` — separation of concerns). Name like
+  `st${var.prefix}data…` (globally unique, lowercase, ≤24 chars; mirror the random-suffix
+  pattern of the tfstate account).
+- An `azurerm_storage_container` "maps" (private).
+- An `azurerm_role_assignment` "vm_storage": scope = the storage account, role =
+  `Storage Blob Data Contributor`, principal = `azurerm_linux_virtual_machine.main.identity[0].principal_id`
+  — mirroring the existing `vm_kv` / `vm_acr` least-privilege grants.
+- Surface the account blob endpoint via `outputs.tf`; pass it to the bot as
+  `LIFEOS_BLOB_ACCOUNT_URL` (+ `LIFEOS_MAP_CONTAINER`, `LIFEOS_MAP_STORE=blob`) through
+  `cloud-init.yaml.tftpl` / the bot env (the URL is not a secret).
+
+## Gap 5 — Runtime dependencies
 
 - The bot process must be able to `import lifeos_mcp` and its deps (`mcp`/FastMCP, `httpx`,
-  the Google client libs used by `calendar_client.py`). Install the package into the bot's
-  runtime: `pip install -e ../lifeos-mcp` (or add it to `telegram-bot/requirements.txt`),
-  and ensure `lifeos-mcp`'s own deps are pinned there too.
-- In the container (`Dockerfile`/`docker-compose.yml`): copy/install `lifeos-mcp`, and mount
-  `context/lifeos.map.json` on a **writable, persisted volume** so the self-healing
-  `resolved` cache survives restarts (the server `save_map`s after every tool call).
+  the Google client libs used by `calendar_client.py`, and now `azure-identity` /
+  `azure-storage-blob`). Install the package into the bot's runtime:
+  `pip install -e ../lifeos-mcp` (or add it to `telegram-bot/requirements.txt`), and pin
+  `lifeos-mcp`'s own deps there too.
+- No Docker volume for the map is needed — persistence is Azure Blob (above). The container
+  just needs the package + deps installed.
 
 ## Open decisions (need Aroosh's call)
 
@@ -170,6 +210,9 @@ names, no resolution logic.
   `notion.md`; confirm areas/sources/ventures/types look right and the key-date prompt fires.
 - **Auth:** lifeos `HttpxNotionClient` token works against the live workspace; lifeos
   `GoogleCalendarClient` cached token self-refreshes (Phase A Task 20).
+- **Storage:** the VM managed identity can read/write blobs in the `maps` container
+  (`Storage Blob Data Contributor` granted); `AzureBlobMapStore` loads/saves
+  `{chat_id}.json`; the `resolved` cache persists across a VM/container restart.
 - **Notion endpoint:** confirm the classic `/v1/databases/{id}/query` endpoint works for the
   live workspace, or switch to data-sources — only `notion_client.py` changes if so.
 - **Parity:** run `/today` `/week` `/add` through the bot against real Notion; compare to the
@@ -181,14 +224,18 @@ names, no resolution logic.
 ## Testing
 
 - **Unit:** the lifeos-mcp suite is green (98). No new unit tests required for wiring.
+- **MapStore unit tests:** `FileMapStore` round-trips by identity; `AzureBlobMapStore`
+  against a fake/mocked blob client (no network) — load-missing, save, reload.
 - **Bot smoke test:** a test that the lifeos server starts over stdio and `get_today`
-  returns a payload against a fixture map (reuse `FIXTURE_MAP` via `LIFEOS_MAP_PATH`),
-  exercising the programmatic registration path without the real network.
+  returns a payload against a fixture map served by `FileMapStore` for a test identity
+  (`LIFEOS_MAP_STORE=file`), exercising the programmatic registration path without network.
 - **Migration parity:** diff old-skill vs new-tool briefing output during live validation.
 
 ## Out of scope
 
-- Multi-user map/template storage and Telegram-ID keying.
+- Full multi-user onboarding (auth, per-user provisioning). The **storage is already
+  identity-keyed** (chat id → user id), so going multi-user is a key change + onboarding,
+  not a storage rebuild.
 - The template layer (authoring record types, required custom fields).
 - Mutations beyond create (`update_record`, `mark_done`, calendar move/delete).
 - Structure creation (new businesses/DBs/sections/views).
