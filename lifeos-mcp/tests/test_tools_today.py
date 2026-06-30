@@ -141,14 +141,16 @@ def _row_exam(title, status, due, exam):
     r["properties"]["Exam Date"] = {"type": "date", "date": {"start": exam}}
     return r
 
-def test_today_surfaces_key_dates_not_exams():
+def test_today_surfaces_key_dates_only_on_their_day():
     m = copy.deepcopy(FIXTURE_MAP)
     m.setdefault("resolved", {}).setdefault("reconciled", {})["ventures"] = "2026-06-27"
     notion = FakeNotionClient(rows={
-        "uni-tasks": [_row_exam("ML", "Open", "2026-06-27", "2026-07-10")]})
+        "uni-tasks": [_row_exam("Today", "Open", "2026-06-27", "2026-06-27"),    # exam today -> reminder
+                      _row_exam("Future", "Open", "2026-06-27", "2026-07-10")]})  # exam future -> not yet
     p = get_today(m, notion, FakeCalendarClient(), date(2026, 6, 27))
     kds = [kd for a in p.areas for kd in a.key_dates]
-    assert {"title": "ML", "label": "Exam Date", "date": "2026-07-10"} in kds
+    assert {"title": "Today", "label": "Exam Date", "date": "2026-06-27"} in kds
+    assert not any(kd["title"] == "Future" for kd in kds)   # future highlighted date not surfaced
 
 def test_today_flags_missing_required_due_date():
     m = copy.deepcopy(FIXTURE_MAP)

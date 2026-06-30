@@ -48,7 +48,7 @@ def _task_rows(map, notion, source, today, warnings, stale_groups):
         rec_key_dates = []
         for k, d in kd_fields:
             kv = _to_date(props.get(d["col"]))
-            if kv and kv >= today:   # only surface upcoming key dates, not past noise
+            if kv and kv == today:   # reminder: surface only on its exact day, never before/after
                 rec_key_dates.append(KeyDate(label=d["col"], date=kv))
                 key_dates.append({"title": title or "", "label": d["col"],
                                   "date": kv.isoformat()})

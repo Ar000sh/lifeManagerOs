@@ -36,16 +36,16 @@ def _uni_row(title="ML", status="Open", due="2026-06-27", exam=None, module=None
     return {"id": title, "url": f"http://n/{title}", "properties": props}
 
 
-# ── 1. Future-due task: excluded from today's tasks, but its key date IS surfaced ──
-def test_future_task_hidden_but_keydate_surfaced():
+# ── 1. Future-due task hidden, but a key date falling TODAY still surfaces (decoupling) ──
+def test_future_task_hidden_but_today_keydate_surfaced():
     m = _skip_reconcile(copy.deepcopy(FIXTURE_MAP))
     notion = FakeNotionClient(rows={"uni-tasks": [
-        _uni_row("FutureExam", "Open", due="2026-08-01", exam="2026-07-10")]})
+        _uni_row("FutureTask", "Open", due="2026-08-01", exam="2026-06-27")]})  # exam == today
     p = get_today(m, notion, FakeCalendarClient(), TODAY)
     titles = {t.title for a in p.areas for t in a.tasks}
     kds = [kd for a in p.areas for kd in a.key_dates]
-    assert "FutureExam" not in titles            # future due -> not in today's list
-    assert any(kd["label"] == "Exam Date" for kd in kds)   # but exam surfaced
+    assert "FutureTask" not in titles            # future due -> not in today's task list
+    assert any(kd["label"] == "Exam Date" for kd in kds)   # but today's reminder surfaces
 
 
 # ── 2. A long-past key date on an open task is NOT surfaced (noise suppressed) ──
@@ -72,15 +72,15 @@ def test_relation_field_carried_on_read():
     assert rec.to_dict()["fields"]["module"] == ["mod-1", "mod-2"]
 
 
-# ── 4. Highlighted date appears in BOTH key_dates and fields (per impl) ──
+# ── 4. A key date falling today appears in BOTH key_dates and fields (per impl) ──
 def test_highlighted_date_in_fields_and_keydates():
     m = _skip_reconcile(copy.deepcopy(FIXTURE_MAP))
     notion = FakeNotionClient(rows={"uni-tasks": [
-        _uni_row("Both", "Open", due="2026-06-27", exam="2026-07-10")]})
+        _uni_row("Both", "Open", due="2026-06-27", exam="2026-06-27")]})   # exam == today
     p = get_today(m, notion, FakeCalendarClient(), TODAY)
     rec = [t for a in p.areas for t in a.tasks][0]
-    assert rec.fields.get("exam_date") == "2026-07-10"        # inline copy
-    assert any(k.label == "Exam Date" for k in rec.key_dates)  # and highlighted
+    assert rec.fields.get("exam_date") == "2026-06-27"        # inline copy
+    assert any(k.label == "Exam Date" for k in rec.key_dates)  # and surfaced as reminder
 
 
 # ── 5. Done task: its key date is NOT surfaced (filtered before keydate walk) ──
@@ -229,8 +229,9 @@ def test_two_keydate_fields():
         "col": "Registration", "type": "date", "highlight": True}
     sch = m["role_schemas"]["university_tasks_db"]
     assert {k for k, _ in key_date_fields(sch)} == {"exam_date", "registration"}
-    row = _uni_row("Multi", "Open", due="2026-06-27", exam="2026-07-10")
-    row["properties"]["Registration"] = {"type": "date", "date": {"start": "2026-07-05"}}
+    # both highlighted dates fall today -> both surface as reminders
+    row = _uni_row("Multi", "Open", due="2026-06-27", exam="2026-06-27")
+    row["properties"]["Registration"] = {"type": "date", "date": {"start": "2026-06-27"}}
     notion = FakeNotionClient(rows={"uni-tasks": [row]})
     p = get_today(m, notion, FakeCalendarClient(), TODAY)
     labels = {kd["label"] for a in p.areas for kd in a.key_dates}
@@ -316,30 +317,48 @@ def _two_keydate_row(title, due, exam, registration):
     return row
 
 
-# ── 22. today: one key date finished + one upcoming -> ONLY the upcoming surfaces ──
-def test_today_multi_keydate_mixed_validity_surfaces_only_upcoming():
+# ── 22. today: one key date not-today (past or future) + one today -> ONLY today's surfaces ──
+def test_today_multi_keydate_only_todays_surfaces():
     m = _two_keydate_map()
-    # exam already finished (past), registration still upcoming
+    # exam not today (past), registration falls today
     notion = FakeNotionClient(rows={"uni-tasks": [
-        _two_keydate_row("Course", due="2026-06-27", exam="2026-01-01", registration="2026-07-10")]})
+        _two_keydate_row("Course", due="2026-06-27", exam="2026-01-01", registration="2026-06-27")]})
     p = get_today(m, notion, FakeCalendarClient(), TODAY)
     kds = [kd for a in p.areas for kd in a.key_dates]
-    assert {kd["label"] for kd in kds} == {"Registration"}     # finished one hidden
+    assert {kd["label"] for kd in kds} == {"Registration"}     # only today's reminder
     rec = [t for a in p.areas for t in a.tasks][0]
     assert {k.label for k in rec.key_dates} == {"Registration"}
-    assert rec.fields["exam_date"] == "2026-01-01"             # finished date still inline
+    assert rec.fields["exam_date"] == "2026-01-01"             # non-today date still inline
 
 
-# ── 23. today: both key dates upcoming -> two DISTINCT entries (not a duplicate) ──
-def test_today_multi_keydate_both_valid_two_distinct_entries():
+# ── 23. today: two key dates both falling today -> two DISTINCT entries (not a duplicate) ──
+def test_today_multi_keydate_both_today_two_distinct_entries():
     m = _two_keydate_map()
     notion = FakeNotionClient(rows={"uni-tasks": [
-        _two_keydate_row("Course", due="2026-06-27", exam="2026-07-10", registration="2026-07-05")]})
+        _two_keydate_row("Course", due="2026-06-27", exam="2026-06-27", registration="2026-06-27")]})
     p = get_today(m, notion, FakeCalendarClient(), TODAY)
     kds = [kd for a in p.areas for kd in a.key_dates]
     assert len(kds) == 2                                       # one per field, no dup
     assert {kd["label"] for kd in kds} == {"Exam Date", "Registration"}
-    assert {kd["date"] for kd in kds} == {"2026-07-10", "2026-07-05"}
+    assert {kd["date"] for kd in kds} == {"2026-06-27"}        # both today
+
+
+# ── 26. week surfaces a future-in-week key date on its day; today (exact-day) does not ──
+def test_week_surfaces_future_in_week_keydate_unlike_today():
+    # 2026-06-28 is later this week (Sun) but after today (Sat 2026-06-27)
+    mw = _skip_reconcile(copy.deepcopy(FIXTURE_MAP))
+    notion_w = FakeNotionClient(rows={"uni-tasks": [
+        _uni_row("Course", "Open", due="2026-06-27", exam="2026-06-28")]})
+    pw = get_week(mw, notion_w, FakeCalendarClient(), TODAY)
+    kds_week = [k for d in pw.days for k in d["key_dates"]]
+    assert any(k["label"] == "Exam Date" and k["date"] == "2026-06-28" for k in kds_week)
+
+    mt = _skip_reconcile(copy.deepcopy(FIXTURE_MAP))
+    notion_t = FakeNotionClient(rows={"uni-tasks": [
+        _uni_row("Course", "Open", due="2026-06-27", exam="2026-06-28")]})
+    pt = get_today(mt, notion_t, FakeCalendarClient(), TODAY)
+    kds_today = [kd for a in pt.areas for kd in a.key_dates]
+    assert not any(kd["label"] == "Exam Date" for kd in kds_today)   # not today -> hidden in /today
 
 
 # ── 24. week: one key date out of range + one in range -> ONLY the in-range surfaces ──
