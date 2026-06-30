@@ -300,3 +300,64 @@ def test_server_today_reconnect_on_workspace_unavailable(tmp_path):
     assert result == {"error": "reconnect_notion"}
     # map file on disk must be unchanged (no half-reconcile persisted)
     assert json.loads(map_path.read_text()) == m
+
+
+def _two_keydate_map():
+    m = _skip_reconcile(copy.deepcopy(FIXTURE_MAP))
+    m["role_schemas"]["university_tasks_db"]["fields"]["registration"] = {
+        "col": "Registration", "type": "date", "highlight": True}
+    return m
+
+def _two_keydate_row(title, due, exam, registration):
+    row = _uni_row(title, "Open", due=due, exam=exam)
+    row["properties"]["Registration"] = {"type": "date", "date": {"start": registration}}
+    return row
+
+
+# ── 22. today: one key date finished + one upcoming -> ONLY the upcoming surfaces ──
+def test_today_multi_keydate_mixed_validity_surfaces_only_upcoming():
+    m = _two_keydate_map()
+    # exam already finished (past), registration still upcoming
+    notion = FakeNotionClient(rows={"uni-tasks": [
+        _two_keydate_row("Course", due="2026-06-27", exam="2026-01-01", registration="2026-07-10")]})
+    p = get_today(m, notion, FakeCalendarClient(), TODAY)
+    kds = [kd for a in p.areas for kd in a.key_dates]
+    assert {kd["label"] for kd in kds} == {"Registration"}     # finished one hidden
+    rec = [t for a in p.areas for t in a.tasks][0]
+    assert {k.label for k in rec.key_dates} == {"Registration"}
+    assert rec.fields["exam_date"] == "2026-01-01"             # finished date still inline
+
+
+# ── 23. today: both key dates upcoming -> two DISTINCT entries (not a duplicate) ──
+def test_today_multi_keydate_both_valid_two_distinct_entries():
+    m = _two_keydate_map()
+    notion = FakeNotionClient(rows={"uni-tasks": [
+        _two_keydate_row("Course", due="2026-06-27", exam="2026-07-10", registration="2026-07-05")]})
+    p = get_today(m, notion, FakeCalendarClient(), TODAY)
+    kds = [kd for a in p.areas for kd in a.key_dates]
+    assert len(kds) == 2                                       # one per field, no dup
+    assert {kd["label"] for kd in kds} == {"Exam Date", "Registration"}
+    assert {kd["date"] for kd in kds} == {"2026-07-10", "2026-07-05"}
+
+
+# ── 24. week: one key date out of range + one in range -> ONLY the in-range surfaces ──
+def test_week_multi_keydate_only_in_range_surfaces():
+    m = _two_keydate_map()
+    notion = FakeNotionClient(rows={"uni-tasks": [
+        _two_keydate_row("Course", due="2026-06-25", exam="2026-01-01", registration="2026-06-26")]})
+    p = get_week(m, notion, FakeCalendarClient(), TODAY)
+    kds = [k for d in p.days for k in d["key_dates"]]
+    assert {k["label"] for k in kds} == {"Registration"}       # out-of-week one dropped
+    assert p.summary["key_dates"] == 1
+
+
+# ── 25. week: both key dates in range -> two DISTINCT entries ──
+def test_week_multi_keydate_both_in_range_two_entries():
+    m = _two_keydate_map()
+    notion = FakeNotionClient(rows={"uni-tasks": [
+        _two_keydate_row("Course", due="2026-06-25", exam="2026-06-24", registration="2026-06-26")]})
+    p = get_week(m, notion, FakeCalendarClient(), TODAY)
+    kds = [k for d in p.days for k in d["key_dates"]]
+    assert len(kds) == 2
+    assert {k["label"] for k in kds} == {"Exam Date", "Registration"}
+    assert p.summary["key_dates"] == 2
