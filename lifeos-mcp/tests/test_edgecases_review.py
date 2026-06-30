@@ -171,13 +171,15 @@ def test_query_not_done_checkbox():
     assert [r["title"] for r in res] == ["Open one"]
 
 
-# ── 12. extract_props drops an unhandled Notion type (multi_select) ──
-def test_extract_props_drops_unhandled_type():
+# ── 12. extract_props now decodes multi_select; truly exotic types still drop on read ──
+def test_extract_props_decodes_multiselect_and_drops_exotic():
     page = {"properties": {
         "Tags": {"type": "multi_select", "multi_select": [{"name": "x"}]},
+        "Calc": {"type": "formula", "formula": {"type": "number", "number": 5}},
         "Name": {"type": "title", "title": [{"plain_text": "T"}]}}}
     props = extract_props(page)
-    assert "Tags" not in props          # FINDING: multi_select/people/etc. silently dropped
+    assert props["Tags"] == ["x"]       # now decoded (coverage expanded)
+    assert "Calc" not in props          # formula/rollup/etc. still best-effort dropped on read
     assert props["Name"] == "T"
 
 

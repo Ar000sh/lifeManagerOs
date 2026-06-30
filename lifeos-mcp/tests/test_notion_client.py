@@ -75,3 +75,53 @@ def test_build_props_typed_and_skips_none_and_relation():
     assert out["Module"]["relation"] == [{"id": "mod-1"}]
     assert "Notes" not in out                       # None skipped
     assert "missing_role" not in out and len(out) == 4
+
+def test_extract_props_reads_multiselect_people_url_email_phone():
+    page = {"properties": {
+        "Tags": {"type": "multi_select", "multi_select": [{"name": "a"}, {"name": "b"}]},
+        "Assignee": {"type": "people", "people": [{"id": "u-1"}, {"id": "u-2"}]},
+        "Link": {"type": "url", "url": "https://x.test"},
+        "Contact": {"type": "email", "email": "a@b.com"},
+        "Phone": {"type": "phone_number", "phone_number": "+49123"}}}
+    props = extract_props(page)
+    assert props["Tags"] == ["a", "b"]
+    assert props["Assignee"] == ["u-1", "u-2"]
+    assert props["Link"] == "https://x.test"
+    assert props["Contact"] == "a@b.com"
+    assert props["Phone"] == "+49123"
+
+def test_build_props_builds_multiselect_people_url_email_phone():
+    from lifeos_mcp.notion_client import build_props
+    schema = {"role": "tasks",
+              "title": {"col": "Name", "type": "title"},
+              "fields": {"tags": {"col": "Tags", "type": "multi_select"},
+                         "assignee": {"col": "Assignee", "type": "people"},
+                         "link": {"col": "Link", "type": "url"},
+                         "contact": {"col": "Contact", "type": "email"},
+                         "phone": {"col": "Phone", "type": "phone_number"}}}
+    out = build_props(schema, {"title": "T", "tags": ["a", "b"], "assignee": ["u-1"],
+                               "link": "https://x.test", "contact": "a@b.com", "phone": "+49123"})
+    assert out["Tags"]["multi_select"] == [{"name": "a"}, {"name": "b"}]
+    assert out["Assignee"]["people"] == [{"id": "u-1"}]
+    assert out["Link"]["url"] == "https://x.test"
+    assert out["Contact"]["email"] == "a@b.com"
+    assert out["Phone"]["phone_number"] == "+49123"
+
+def test_build_props_raises_on_declared_unsupported_type():
+    from lifeos_mcp.notion_client import build_props
+    from lifeos_mcp.errors import UnsupportedFieldType
+    schema = {"role": "tasks",
+              "title": {"col": "Name", "type": "title"},
+              "fields": {"calc": {"col": "Calc", "type": "formula"}}}
+    # a declared field with an unsupported type + a real value fails loud, not silently dropped
+    with pytest.raises(UnsupportedFieldType):
+        build_props(schema, {"title": "T", "calc": 5})
+
+def test_build_props_unsupported_type_with_none_value_is_skipped():
+    from lifeos_mcp.notion_client import build_props
+    schema = {"role": "tasks",
+              "title": {"col": "Name", "type": "title"},
+              "fields": {"calc": {"col": "Calc", "type": "formula"}}}
+    # None value is skipped before the type check -> no raise (nothing to write)
+    out = build_props(schema, {"title": "T", "calc": None})
+    assert "Calc" not in out

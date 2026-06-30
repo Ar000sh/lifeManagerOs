@@ -1,6 +1,6 @@
 from typing import Protocol
 import httpx
-from .errors import NotionNotFound, NotionAuthError, TransientError
+from .errors import NotionNotFound, NotionAuthError, TransientError, UnsupportedFieldType
 from .resolver_schema import field_def
 
 class NotionClient(Protocol):
@@ -34,29 +34,49 @@ def extract_props(page: dict) -> dict:
             out[name] = v.get("number")
         elif t == "relation":
             out[name] = [r.get("id") for r in v.get("relation", [])]
+        elif t == "multi_select":
+            out[name] = [o.get("name") for o in v.get("multi_select", [])]
+        elif t == "people":
+            out[name] = [p.get("id") for p in v.get("people", [])]
+        elif t in ("url", "email", "phone_number"):
+            out[name] = v.get(t)
     return out
 
 TYPE_BUILDERS = {
-    "title":     lambda v: {"title": [{"text": {"content": str(v)}}]},
-    "date":      lambda v: {"date": {"start": str(v)}},
-    "select":    lambda v: {"select": {"name": str(v)}},
-    "status":    lambda v: {"status": {"name": str(v)}},
-    "checkbox":  lambda v: {"checkbox": bool(v)},
-    "number":    lambda v: {"number": v},
-    "relation":  lambda v: {"relation": [{"id": i} for i in v]},
-    "rich_text": lambda v: {"rich_text": [{"text": {"content": str(v)}}]},
+    "title":        lambda v: {"title": [{"text": {"content": str(v)}}]},
+    "date":         lambda v: {"date": {"start": str(v)}},
+    "select":       lambda v: {"select": {"name": str(v)}},
+    "status":       lambda v: {"status": {"name": str(v)}},
+    "checkbox":     lambda v: {"checkbox": bool(v)},
+    "number":       lambda v: {"number": v},
+    "relation":     lambda v: {"relation": [{"id": i} for i in v]},
+    "rich_text":    lambda v: {"rich_text": [{"text": {"content": str(v)}}]},
+    "multi_select": lambda v: {"multi_select": [{"name": str(n)} for n in v]},
+    "people":       lambda v: {"people": [{"id": i} for i in v]},
+    "url":          lambda v: {"url": str(v)},
+    "email":        lambda v: {"email": str(v)},
+    "phone_number": lambda v: {"phone_number": str(v)},
 }
 
+# The engine's authoritative set of field types it can read and write.
+SUPPORTED_TYPES = frozenset(TYPE_BUILDERS)
+
 def build_props(schema: dict, fields: dict) -> dict:
-    """Build Notion property payloads from each field's declared type."""
+    """Build Notion property payloads from each field's declared type.
+
+    A declared field carrying a real value whose type has no builder is a map
+    misconfiguration: raise rather than silently dropping the value."""
     props = {}
     for key, value in fields.items():
         d = field_def(schema, key)
         if not d or value is None:
             continue
         builder = TYPE_BUILDERS.get(d.get("type"))
-        if builder:
-            props[d["col"]] = builder(value)
+        if builder is None:
+            raise UnsupportedFieldType(
+                f"field {key!r} (column {d.get('col')!r}) declares unsupported "
+                f"type {d.get('type')!r}")
+        props[d["col"]] = builder(value)
     return props
 
 class HttpxNotionClient:
