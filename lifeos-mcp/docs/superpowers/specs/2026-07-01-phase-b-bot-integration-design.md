@@ -190,19 +190,15 @@ commands, Aroosh approves/applies — never `terraform apply` on his behalf).** 
 - No Docker volume for the map is needed — persistence is Azure Blob (above). The container
   just needs the package + deps installed.
 
-## Open decisions (need Aroosh's call)
+## Decisions (locked 2026-07-01)
 
-1. **Calendar overlap.** `get_today`/`get_week` already read calendar via lifeos, and
-   `create_event` writes via lifeos. Do we **keep** the `@cocal/google-calendar` npx server
-   for richer ad-hoc calendar ops, or route all calendar through lifeos? *Recommend:* keep
-   the npx server for ad-hoc, use lifeos for briefings + simple adds. Both share the same
-   cached OAuth token path, so no double auth.
-2. **Notion overlap.** Keep the `@notionhq/notion-api` npx server exposed for ad-hoc Notion
-   reads/edits the 5 tools don't cover, or remove it to force everything through lifeos?
-   *Recommend:* keep it, but the daily skills use lifeos. Risk: the agent mixing paths —
-   mitigate via skill wording.
-3. **`/add` calendar routing** — `create_event` (lifeos) vs the Google MCP for event creation
-   in the `/add` skill. *Recommend:* lifeos `create_event` for the common case.
+1. **Calendar + Notion overlap — LOCKED (2026-07-01): keep both npx servers alongside lifeos.**
+   The `@cocal/google-calendar` and `@notionhq/notion-api` npx servers stay registered for
+   ad-hoc ops the 5 tools don't cover. The **daily skills use lifeos**; ad-hoc requests may use
+   the npx servers. Calendar shares one cached OAuth token path (no double auth). Mitigate the
+   agent mixing paths via skill wording ("for /today /week /add use the lifeos tools").
+2. **`/add` event creation — LOCKED (2026-07-01): lifeos `create_event`** for the common case;
+   the Google MCP remains available for anything richer.
 
 ## Live validation (manual, with Aroosh — needs the real workspace)
 
