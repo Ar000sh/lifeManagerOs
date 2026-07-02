@@ -39,7 +39,7 @@ def test_authorized_chat_runs_agent_replies_and_records(monkeypatch):
     monkeypatch.setattr(bot.telemetry, "record_run", record)
     update, context = _update_context(chat_id=111)
     asyncio.run(bot.handle_message(update, context))
-    run_agent.assert_awaited_once_with("/today")
+    run_agent.assert_awaited_once_with("/today", chat_id=111)
     update.message.reply_text.assert_awaited_once_with("hi back")
     record.assert_called_once()
     assert record.call_args.args[0] == "today"   # skill

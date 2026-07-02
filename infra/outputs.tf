@@ -47,3 +47,8 @@ output "subscription_id" {
   description = "Subscription ID → GitHub Variable AZURE_SUBSCRIPTION_ID."
   value       = var.subscription_id
 }
+
+output "maps_blob_endpoint" {
+  description = "Blob endpoint for the app-data account (set as LIFEOS_BLOB_ACCOUNT_URL)."
+  value       = azurerm_storage_account.data.primary_blob_endpoint
+}

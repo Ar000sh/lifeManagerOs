@@ -25,6 +25,7 @@ def required_core(schema: dict) -> list[str]:
     return [k for k in REQUIRED.get(schema.get("role"), ("title",)) if col(schema, k)]
 
 def is_complete(schema: dict, props: dict) -> bool:
+    # the done predicate tells us if the status of the task is done no need to show it
     p = schema.get("done_predicate")
     return bool(p) and props.get(p["col"]) == p.get("equals", True)
 

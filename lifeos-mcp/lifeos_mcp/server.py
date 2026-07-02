@@ -1,8 +1,8 @@
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from mcp.server.fastmcp import FastMCP
-from .config import Settings, load_settings, load_map, save_map
-from .errors import WorkspaceUnavailable
+from .config import Settings, load_settings, build_store
+from .errors import WorkspaceUnavailable, MapNotFound
 from .notion_client import HttpxNotionClient
 from .calendar_client import GoogleCalendarClient
 from .tools.get_today import get_today
@@ -14,14 +14,14 @@ from .tools.create_event import create_event
 
 def build_app(settings: Settings, notion=None, calendar=None) -> FastMCP:
     app = FastMCP("lifeos")
+    store = build_store(settings)
 
     def _notion():
         return notion or HttpxNotionClient(settings.notion_token)
 
     def _calendar():
         return calendar or GoogleCalendarClient(
-            settings.google_credentials, settings.google_token_path, settings.tz
-        )
+            settings.google_credentials, settings.google_token_path, settings.tz)
 
     def _today():
         return datetime.now(ZoneInfo(settings.tz)).date()
@@ -29,39 +29,51 @@ def build_app(settings: Settings, notion=None, calendar=None) -> FastMCP:
     @app.tool(name="get_today")
     def get_today_tool() -> dict:
         """Today's tasks, key dates, work shift, and calendar events across all areas."""
-        m = load_map(settings.map_path)
+        try:
+            m = store.load(settings.identity)
+        except MapNotFound:
+            return {"error": "no_map"}
         try:
             payload = get_today(m, _notion(), _calendar(), _today(), settings.tz)
         except WorkspaceUnavailable:
             return {"error": "reconnect_notion"}
-        save_map(m, settings.map_path)
+        store.save(settings.identity, m)
         return payload.to_dict()
 
     @app.tool(name="get_week")
     def get_week_tool() -> dict:
         """This week's tasks, deadlines, shifts, and events (Mon-Sun)."""
-        m = load_map(settings.map_path)
+        try:
+            m = store.load(settings.identity)
+        except MapNotFound:
+            return {"error": "no_map"}
         try:
             payload = get_week(m, _notion(), _calendar(), _today(), settings.tz)
         except WorkspaceUnavailable:
             return {"error": "reconnect_notion"}
-        save_map(m, settings.map_path)
+        store.save(settings.identity, m)
         return payload.to_dict()
 
     @app.tool(name="query_records")
     def query_records_tool(role: str, filters: dict | None = None) -> list:
         """Query records of a function role (tasks/schedule/catalog) with optional filters."""
-        m = load_map(settings.map_path)
+        try:
+            m = store.load(settings.identity)
+        except MapNotFound:
+            return []
         res = query_records(m, _notion(), role, filters)
-        save_map(m, settings.map_path)
+        store.save(settings.identity, m)
         return res
 
     @app.tool(name="add_record")
     def add_record_tool(role: str, fields: dict, area: str | None = None) -> dict:
         """Create a record (row) of a role into its resolved destination. Records only."""
-        m = load_map(settings.map_path)
+        try:
+            m = store.load(settings.identity)
+        except MapNotFound:
+            return {"created": False, "error": "no_map"}
         res = add_record(m, _notion(), role, fields, area)
-        save_map(m, settings.map_path)
+        store.save(settings.identity, m)
         return res
 
     @app.tool(name="create_event")

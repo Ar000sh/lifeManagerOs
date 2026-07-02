@@ -289,20 +289,31 @@ def test_server_today_reconnect_on_workspace_unavailable(tmp_path):
     # two ventures both auth-failing during reconcile -> blast-radius -> WorkspaceUnavailable
     m["resolved"]["groups"]["ventures"]["second-page"] = {
         "label": "Two", "role": "tasks", "tasks_db": "two-db", "cached_at": "2026-06-26"}
-    map_path = tmp_path / "map.json"
-    map_path.write_text(json.dumps(m))
+    maps_dir = tmp_path / "maps"; maps_dir.mkdir()
+    (maps_dir / "111.json").write_text(json.dumps(m), encoding="utf-8")
 
     notion = FakeNotionClient(children={"biz-root": []},
         fail_with={"laundro-page": NotionAuthError, "second-page": NotionAuthError})
-    settings = Settings(notion_token="t", google_credentials="{}",
-                        google_token_path="/x", map_path=str(map_path), tz="Europe/Berlin")
+    settings = Settings(identity="111", notion_token="t", google_credentials="{}",
+                        google_token_path="/x", map_store="file", map_dir=str(maps_dir),
+                        tz="Europe/Berlin")
     app = build_app(settings, notion=notion, calendar=FakeCalendarClient())
 
     fn = app._tool_manager.get_tool("get_today").fn
     result = fn()
     assert result == {"error": "reconnect_notion"}
     # map file on disk must be unchanged (no half-reconcile persisted)
-    assert json.loads(map_path.read_text()) == m
+    assert json.loads((maps_dir / "111.json").read_text()) == m
+
+
+def test_server_today_no_map_when_identity_absent(tmp_path):
+    from lifeos_mcp.config import Settings
+    from lifeos_mcp.server import build_app
+    settings = Settings(identity="999", notion_token="t", google_credentials="{}",
+                        google_token_path="/x", map_store="file",
+                        map_dir=str(tmp_path / "maps"), tz="Europe/Berlin")
+    app = build_app(settings, notion=FakeNotionClient(), calendar=FakeCalendarClient())
+    assert app._tool_manager.get_tool("get_today").fn() == {"error": "no_map"}
 
 
 def _two_keydate_map():

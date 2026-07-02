@@ -65,7 +65,7 @@ def _format_agent_error(exc: Exception, stderr_chunks: list[str]) -> str:
     return f"{message}\n\nClaude stderr:\n{tail}"
 
 
-def build_options(stderr=None) -> ClaudeAgentOptions:
+def build_options(stderr=None, chat_id=None) -> ClaudeAgentOptions:
     """Options that make the headless agent behave like your Claude Code project."""
     # MCP servers declared *programmatically* are trusted in a non-interactive run
     # (project .mcp.json servers get silently skipped here).
@@ -87,6 +87,22 @@ def build_options(stderr=None) -> ClaudeAgentOptions:
             "@cocal/google-calendar-mcp", gcal_env
         )
 
+    # lifeos — our own MCP: deterministic get_today/get_week/add_record/create_event over
+    # the map. Registered PROGRAMMATICALLY (project .mcp.json is skipped in headless runs).
+    lifeos_env = {
+        "NOTION_TOKEN": NOTION_TOKEN,
+        "GOOGLE_OAUTH_CREDENTIALS": GOOGLE_OAUTH_CREDENTIALS,
+        "GOOGLE_CALENDAR_MCP_TOKEN_PATH": GOOGLE_CALENDAR_MCP_TOKEN_PATH,
+        "LIFEOS_MAP_STORE": os.environ.get("LIFEOS_MAP_STORE", "file"),
+        "LIFEOS_BLOB_ACCOUNT_URL": os.environ.get("LIFEOS_BLOB_ACCOUNT_URL", ""),
+        "LIFEOS_MAP_CONTAINER": os.environ.get("LIFEOS_MAP_CONTAINER", "maps"),
+        "LIFEOS_IDENTITY": str(chat_id) if chat_id is not None else "",
+    }
+    mcp_servers["lifeos"] = {
+        "type": "stdio", "command": sys.executable,
+        "args": ["-m", "lifeos_mcp.server"], "env": lifeos_env,
+    }
+
     return ClaudeAgentOptions(
         cwd=PROJECT_DIR,
         # Load CLAUDE.md, .claude/commands skills, and any hosted connectors from your
@@ -100,6 +116,7 @@ def build_options(stderr=None) -> ClaudeAgentOptions:
             "Read", "Glob", "Grep",
             "mcp__notion-api",       # all Notion MCP tools (read + create/update)
             "mcp__google-calendar",  # all Google Calendar MCP tools
+            "mcp__lifeos",           # our own deterministic map-backed tools
         ],
         # Read-only filesystem: remove the write/exec built-ins from the agent's
         # context. Do NOT use `tools=[...]` to whitelist here — that field sets the
@@ -134,7 +151,7 @@ def _extract_usage(message):
     return input_tokens, output_tokens, cost_usd
 
 
-async def run_agent(prompt: str) -> AgentResult:
+async def run_agent(prompt: str, chat_id: int | None = None) -> AgentResult:
     """Run one agent turn and return its reply + best-effort usage metrics."""
     text_chunks: list[str] = []
     final_result: str | None = None
@@ -144,7 +161,7 @@ async def run_agent(prompt: str) -> AgentResult:
     try:
         async for message in query(
             prompt=prompt,
-            options=build_options(stderr=stderr_chunks.append),
+            options=build_options(stderr=stderr_chunks.append, chat_id=chat_id),
         ):
             if isinstance(message, AssistantMessage):
                 for block in message.content:

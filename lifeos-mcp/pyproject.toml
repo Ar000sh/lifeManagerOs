@@ -9,6 +9,8 @@ dependencies = [
   "google-auth>=2.0",
   "google-auth-oauthlib>=1.0",
   "tzdata>=2024.1",
+  "azure-identity>=1.15",
+  "azure-storage-blob>=12.19",
 ]
 
 [project.optional-dependencies]

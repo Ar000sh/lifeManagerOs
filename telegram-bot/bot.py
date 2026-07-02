@@ -111,13 +111,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     try:
         if route.kind == "standalone_command":
             # Bare /today, /week, /add: one-shot, never touches a live session.
-            result = await run_agent(route.command_text or text)
+            result = await run_agent(route.command_text or text, chat_id=chat_id)
             reply = result.reply
             session_mode = "standalone"
         elif route.kind == "command_conversation":
             # "/today help me ...": run the command one-shot, then hand its
             # result + the follow-up to the implicit live session as context.
-            command_result = await run_agent(route.command_text or text)
+            command_result = await run_agent(route.command_text or text, chat_id=chat_id)
             prompt = compose_command_conversation_prompt(
                 route.command_text or text,
                 command_result.reply,

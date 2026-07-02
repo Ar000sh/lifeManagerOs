@@ -20,6 +20,11 @@ WORKDIR /app/telegram-bot
 COPY telegram-bot/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
+# --- Our own MCP server: the bot spawns `python -m lifeos_mcp.server` at runtime, so
+#     the package must be importable image-wide. Installed non-editable (real image). ---
+COPY lifeos-mcp /app/lifeos-mcp
+RUN pip install --no-cache-dir /app/lifeos-mcp
+
 # --- Project context the agent loads: CLAUDE.md, skills, reference docs, and the bot ---
 COPY CLAUDE.md /app/CLAUDE.md
 COPY .claude /app/.claude

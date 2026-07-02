@@ -36,9 +36,10 @@ def test_mcp_tools_are_not_gated_by_tools_field(monkeypatch):
 
 def test_both_mcp_servers_are_registered_and_allowed(monkeypatch):
     opts = _options(monkeypatch)
-    assert set(opts.mcp_servers) == {"notion-api", "google-calendar"}
+    assert set(opts.mcp_servers) == {"notion-api", "google-calendar", "lifeos"}
     assert "mcp__notion-api" in opts.allowed_tools
     assert "mcp__google-calendar" in opts.allowed_tools
+    assert "mcp__lifeos" in opts.allowed_tools
 
 
 def test_filesystem_stays_read_only(monkeypatch):
