@@ -13,22 +13,23 @@ The clock (`now`) is injectable so tests can fast-forward time without waiting.
 """
 
 import asyncio
+import logging
 from dataclasses import dataclass, field
 from time import monotonic
 from typing import Callable, Literal
-import logging
+
 from agent_runner import AgentResult, LiveAgentClient
+from logging_config import configure_logging
 
 SessionMode = Literal["implicit", "chat"]
 
 IMPLICIT_TIMEOUT_SECONDS = 10 * 60
 CHAT_TIMEOUT_SECONDS = 30 * 60
 
-logging.basicConfig(
-    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-    level=logging.INFO,
-)
+configure_logging()
 logger = logging.getLogger("lifeos-bot")
+
+
 def timeout_for_mode(mode: SessionMode) -> int:
     return CHAT_TIMEOUT_SECONDS if mode == "chat" else IMPLICIT_TIMEOUT_SECONDS
 

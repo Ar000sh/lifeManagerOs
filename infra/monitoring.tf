@@ -163,7 +163,11 @@ resource "azapi_resource" "container_logs_table" {
         columns = [
           { name = "TimeGenerated", type = "datetime" },
           { name = "Level", type = "string" },         # INFO | WARNING | ERROR | DEBUG…
-          { name = "Message", type = "string" },       # the unwrapped log line
+          { name = "Logger", type = "string" },        # lifeos-bot | httpx | telegram…
+          { name = "Event", type = "string" },         # optional stable event name
+          { name = "Message", type = "string" },       # human-readable message
+          { name = "ExceptionType", type = "string" }, # ValueError | NetworkError…
+          { name = "Exception", type = "string" },     # complete multiline traceback
           { name = "Stream", type = "string" },        # stdout | stderr
           { name = "ContainerTime", type = "string" }, # Docker's own timestamp
           { name = "RawData", type = "string" },       # original JSON line (fallback)
@@ -245,14 +249,22 @@ resource "azurerm_monitor_data_collection_rule" "container_logs" {
     transform_kql = <<-KQL
       source
       | extend d = parse_json(RawData)
-      | extend Message = tostring(d["log"])
+      | extend DockerMessage = tostring(d["log"])
+      | extend app = parse_json(DockerMessage)
       | extend Stream = tostring(d["stream"])
       | extend ContainerTime = tostring(d["time"])
-      | extend Level = tostring(split(Message, " | ")[1])
+      | extend StructuredLevel = tostring(app["level"])
+      | extend Level = iff(isnotempty(StructuredLevel), StructuredLevel, tostring(split(DockerMessage, " | ")[1]))
+      | extend Logger = iff(isnotempty(StructuredLevel), tostring(app["logger"]), tostring(split(DockerMessage, " | ")[2]))
+      | extend Event = tostring(app["event"])
+      | extend Message = iff(isnotempty(StructuredLevel), tostring(app["message"]), DockerMessage)
+      | extend ExceptionType = tostring(app["exception_type"])
+      | extend Exception = tostring(app["exception"])
       %{~if !var.ingest_debug_logs~}
       | where Level != "DEBUG"
       %{~endif~}
-      | project TimeGenerated, Level, Message, Stream, ContainerTime, RawData
+      | where not(Logger == "httpx" and Level == "INFO" and Message has "/getUpdates")
+      | project TimeGenerated, Level, Logger, Event, Message, ExceptionType, Exception, Stream, ContainerTime, RawData
     KQL
   }
 }
