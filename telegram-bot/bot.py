@@ -34,6 +34,10 @@ logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
     level=logging.INFO,
 )
+# set the minmal to warn so the info health logs dont get transmitted
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+
 logger = logging.getLogger("lifeos-bot")
 
 # One process-wide registry of live conversations, keyed by Telegram chat id.
