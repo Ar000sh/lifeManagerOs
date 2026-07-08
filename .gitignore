@@ -6,6 +6,9 @@
 **/secrets/
 .claude/settings.local.json
 
+# Per-chat workspace maps (personal Notion database IDs + structure)
+context/maps/*.json
+
 # --- Python ---
 .venv/
 venv/

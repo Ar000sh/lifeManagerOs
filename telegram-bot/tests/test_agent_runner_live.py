@@ -51,7 +51,7 @@ def test_live_agent_client_connects_and_asks(monkeypatch):
     monkeypatch.setattr(agent_runner, "AssistantMessage", FakeAssistantMessage)
     monkeypatch.setattr(agent_runner, "ResultMessage", FakeResultMessage)
     client = agent_runner.LiveAgentClient(
-        options_factory=lambda stderr=None: "options",
+        options_factory=lambda stderr=None, chat_id=None: "options",
         client_cls=FakeSDKClient,
     )
 
@@ -72,7 +72,7 @@ async def _connect_and_ask(client, prompt):
 
 def test_live_agent_client_interrupt_and_disconnect():
     client = agent_runner.LiveAgentClient(
-        options_factory=lambda stderr=None: "options",
+        options_factory=lambda stderr=None, chat_id=None: "options",
         client_cls=FakeSDKClient,
     )
 

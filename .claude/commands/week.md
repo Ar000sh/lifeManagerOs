@@ -1,36 +1,35 @@
 # /week — Weekly Overview
 
-Structured view of the current week (Mon–Sun, Europe/Berlin). Pull live data.
-**Resolve all Notion targets via `context/resolver.md`.** Prefer filtered Notion API
-queries over semantic search.
+Structured view of the current week (Mon–Sun, Europe/Berlin). Call **`mcp__lifeos__get_week`**
+and format its JSON — do NOT resolve Notion yourself.
 
 ## Steps
-1. Determine the current week (Monday–Sunday) in Europe/Berlin.
-2. **Calendar** — fetch all events for the week via the Google Calendar MCP list-events
-   tool.
-3. **Work shifts** — resolve the `schedule` source; fetch entries whose `date` falls in
-   the week.
-4. **University deadlines** — resolve the `university_tasks` source; fetch items whose
-   `due_date` or `exam_date` is within the week and `status` ≠ `done`; sort ascending.
-5. **Business tasks** — resolve every `business_tasks` source (all businesses); fetch
-   items whose `status` = the role's `this_week` value or whose `due_date` is within the
-   week.
-6. Self-heal failed sources per the resolver; flag any that stay broken.
+1. Call `mcp__lifeos__get_week` (no arguments).
+2. On `{"error": "reconnect_notion"}` → say Notion looks disconnected. On `{"error":
+   "no_map"}` → tell the user to run `/refresh-notion`.
+3. Otherwise format: `start`, `end`, `days[]` (each `date`, `tasks[]`, `key_dates[]`, `shift`,
+   `events[]`), `summary` (`tasks`, `key_dates`, `shifts`), `warnings[]`.
+
+## Rendering rules
+- Group by day (skip empty days). Per day: calendar events (time+title), work `shift`
+  (`Start–End`), tasks (`title`, area/venture, `[status]`), and key dates as `• {label} —
+  {title}` under their day.
+- Never re-print a key date inline among a task's fields.
+- End with the `summary` counts and a one-line actionable note (include any `warnings`).
 
 ## Output Format
-Group by day; skip empty days.
 ---
 **📆 Week of [Mon Date] – [Sun Date]**
 
 **Monday, [Date]**
 - 🗓 [time] Calendar event
-- 💼 Work: [Start–End] or —
-- 🎓 [Task name] due (Module)
-- 🚀 [Business task] [Priority]
+- 💼 Work: [Start–End]
+- 🎓/🚀 [Task] [status] — [area/venture]
+- 📌 [Label] — [Task]   (key date on this day)
 
 … (each day) …
 
 **Summary**
-- X university deadlines, X business tasks, X work shifts
+- [summary.tasks] tasks, [summary.key_dates] key dates, [summary.shifts] shifts
 - [one actionable note]
 ---

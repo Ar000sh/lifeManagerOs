@@ -1,8 +1,23 @@
+import json
+from pathlib import Path
 from typing import Protocol
 
 class CalendarClient(Protocol):
     def list_events(self, time_min: str, time_max: str) -> list[dict]: ...
     def create_event(self, title: str, start: str, end: str, notes=None) -> dict: ...
+
+def load_authorized_user_info(token_path: str, credentials_path: str) -> dict:
+    data = json.loads(Path(token_path).read_text(encoding="utf-8"))
+    if "normal" not in data:
+        return data
+    # @cocal/google-calendar-mcp token: creds nested under "normal", client
+    # id/secret only in the OAuth keys file.
+    keys = json.loads(Path(credentials_path).read_text(encoding="utf-8"))
+    client = keys.get("installed") or keys.get("web") or {}
+    return {"type": "authorized_user",
+            "client_id": client["client_id"],
+            "client_secret": client["client_secret"],
+            "refresh_token": data["normal"]["refresh_token"]}
 
 def normalize_event(raw: dict) -> dict:
     def _se(side): return side.get("dateTime") or side.get("date")
@@ -13,8 +28,9 @@ class GoogleCalendarClient:
     def __init__(self, credentials_path: str, token_path: str, tz: str = "Europe/Berlin"):
         from google.oauth2.credentials import Credentials
         from googleapiclient.discovery import build
-        creds = Credentials.from_authorized_user_file(
-            token_path, ["https://www.googleapis.com/auth/calendar"])
+        creds = Credentials.from_authorized_user_info(
+            load_authorized_user_info(token_path, credentials_path),
+            ["https://www.googleapis.com/auth/calendar"])
         self._svc = build("calendar", "v3", credentials=creds, cache_discovery=False)
         self._tz = tz
 

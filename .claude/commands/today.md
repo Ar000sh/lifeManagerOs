@@ -1,23 +1,25 @@
 # /today — Daily Briefing
 
-Structured morning briefing for today. Pull live data — don't summarize from memory.
-**Resolve all Notion targets via `context/resolver.md`.** Prefer filtered Notion API
-queries over semantic search.
+Structured morning briefing for today. Call the **`mcp__lifeos__get_today`** tool and format
+its JSON — do NOT resolve Notion yourself.
 
 ## Steps
-1. Get today's date in Europe/Berlin.
-2. **Calendar** — fetch today's events via the Google Calendar MCP list-events tool.
-   Show time + title.
-3. **Tasks (all task roles)** — resolve every source for the map's `task_roles`
-   (each business's `business_tasks` DB + the `university_tasks` DB). For each, query
-   items where the role's `due_date` (or `exam_date` for university) is today or earlier,
-   OR — for `business_tasks` — `status` = the role's `this_week` value; in all cases exclude
-   items whose `status` = the role's `done` value. Use each role's `db_role_schemas` for the real
-   property names.
-4. **Work shift today** — resolve the `schedule` source (work_schedule_db) and find
-   entries where the `date` property = today.
-5. If a source fails to resolve, self-heal per the resolver; if it still fails, include
-   the rest and flag the broken one rather than aborting.
+1. Call `mcp__lifeos__get_today` (no arguments).
+2. If it returns `{"error": "reconnect_notion"}`, reply that Notion looks disconnected and to
+   reconnect — do not print an empty briefing. If `{"error": "no_map"}`, tell the user to run
+   `/refresh-notion` first.
+3. Otherwise format the payload: `date`, `areas[]` (each `label`, `emoji`, `tasks[]`,
+   `key_dates[]`, `shift`), `events[]`, and `warnings[]`.
+
+## Rendering rules
+- **Tasks:** show `title`; prefix **URGENT** when `overdue` is true; append `source_label`
+  (the venture) when present; show `fields.priority` in brackets if present.
+- **Key dates:** render the area's `key_dates[]` in a single **"📌 Key dates"** section as
+  `• {label} — {title}`. Do NOT also print a highlighted date inline under its task.
+- **Shift:** render `shift` as `Start–End` (or "No shift today").
+- **Events:** the top-level `events[]` are today's calendar (time + title).
+- **Warnings:** if `warnings[]` is non-empty, add a short "⚠ Note: …" line; never hide a
+  failure silently.
 
 ## Output Format
 ---
@@ -26,14 +28,14 @@ queries over semantic search.
 **🗓 Calendar**
 - [time] Event name  (or "none")
 
-**🎓 University**
-- [URGENT if overdue] Task name — Due: date (Module)  (or "none")
+**🎓 University** (and each area with content)
+- [URGENT if overdue] Task name [Priority]  (or "none")
 
 **💼 Work**
 - Shift: Start–End  (or "No shift today")
 
-**🚀 Business**
-- Task name [Priority] — Business name  (or "none")
+**📌 Key dates**
+- [Label] — [Task]  (omit the section if none)
 
-**Quick note:** [one-sentence observation]
+**Quick note:** [one-sentence observation, incl. any warning]
 ---

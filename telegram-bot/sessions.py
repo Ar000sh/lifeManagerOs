@@ -111,7 +111,7 @@ class SessionManager:
         session = self.sessions.get(chat_id)
         if session is None:
             session = ConversationSession(
-                chat_id=chat_id, client=self.client_factory(), mode=mode, now=self.now
+                chat_id=chat_id, client=self.client_factory(chat_id=chat_id), mode=mode, now=self.now
             )
             self.sessions[chat_id] = session
             logger.info("created a new session")

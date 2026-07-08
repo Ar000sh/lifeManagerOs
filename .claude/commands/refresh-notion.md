@@ -1,46 +1,63 @@
 # /refresh-notion — Build & sync the workspace map
 
-Build or repair `context/lifeos.map.json`, then regenerate the human-readable
-`context/notion.md`. This is the only skill that writes the **durable** map (`anchors`, `rules`, `db_role_schemas`, `task_roles`); consuming skills may lazily populate the disposable `resolved` cache per `context/resolver.md`. See
-`context/resolver.md` for how the map is consumed.
+Build or repair the Life-OS **map** for the current identity, written to
+`context/maps/<LIFEOS_IDENTITY>.json` (default identity: the single configured chat id).
+Then regenerate the human-readable `context/notion.md`. This is the only skill that writes
+the durable map; the running `lifeos` MCP server only reads it. After writing locally, push
+it to the store with:
+`python -m lifeos_mcp.mapctl push --identity <id> --file context/maps/<id>.json`.
+
+The map shape is authoritative and typed. Top-level keys:
+`workspace_root, anchors, areas, role_schemas, child_schema_defaults, resolved`.
 
 ## Mode A — Bootstrap (no map yet, or `--bootstrap`)
-1. Find the workspace root: use `lifeos.map.json.workspace_root` if present; else
-   `notion-search` for the user's Life-OS root page. If nothing is found, STOP and ask
-   the user to (re)connect Notion.
-2. From the root, discover the top-level sections and identify anchors:
-   `business_root`, `university_section`, `university_tasks_db`, `modules_db`,
-   `work_schedule_db`. When a candidate is ambiguous, ask ONE question (ask-then-remember).
-3. For each operational DB, infer its **role** and **property-role schema** by inspecting
-   its property names + types (title, date, select, relation, checkbox). Record the
-   schema under `db_role_schemas`. Record select option labels you rely on under
-   `status_values` (e.g. `done`, `this_week`).
-4. Record enumeration `rules` (businesses are child pages under `business_root`, each with
-   a tasks DB of role `business_tasks`). Enumerate the children: those WITH a
-   `business_tasks`-shaped DB go into `resolved.businesses`; child pages that are NOT
-   businesses (no such DB, e.g. notes/test pages) go into `resolved.ignored` so runtime
-   skills don't re-probe them.
-5. Set `task_roles` to the task-like roles to aggregate (default
-   `["business_tasks","university_tasks"]`).
-6. Write `context/lifeos.map.json`.
+1. Find the workspace root (`workspace_root` if present, else `notion-search` the Life-OS
+   root page). If nothing is found, STOP and ask the user to (re)connect Notion.
+2. Discover top-level **areas** and pin **anchors** (stable landmark ids), e.g.
+   `business_root`, `university_tasks_db`, `modules_db`, `work_schedule_db`. Ask ONE
+   question when a candidate is ambiguous (ask-then-remember).
+3. Build `areas`: each area has a `label`, `emoji`, and one of:
+   - `sources`: `[{ "anchor": "<name>", "role": "tasks|schedule" }]` for anchored DBs,
+   - `group`: `{ "under": "<anchor>", "child_sources": [{"role": "tasks"}] }` for
+     child-enumerated ventures,
+   - `catalog`: `{ "anchor": "<name>", "role": "catalog" }` (e.g. modules).
+4. For each source DB, **introspect** its Notion property names + types and write a
+   `role_schemas["<anchor-or-id>"]` entry:
+   - **core block** (required, engine-recognized): `title` `{col,type:title}`;
+     `due_date` `{col,type:date}` (tasks) or `date`/`start`/`end` (schedule);
+     `done_predicate` `{col,type:status,equals:"Done"}` **or** `{col,type:checkbox,equals:true}`;
+     optional `week_predicate` `{col,equals:"This Week"}`.
+   - **`fields`** (optional, typed, declared-only): every other column you want carried, each
+     `{col,type}` where `type` ∈ title,date,select,status,checkbox,number,relation,rich_text,
+     multi_select,people,url,email,phone_number. A date column may add `highlight:true` to
+     become a **key date** (reminder) — see the key-date prompt below.
+5. Enumerate `group` children under the anchor; each venture with a tasks-shaped DB goes into
+   `resolved.groups.<area>` keyed by its Notion **page id**
+   (`{label, role:"tasks", tasks_db:"<id>", cached_at}`); non-ventures into `resolved.ignored`.
+   Provide `child_schema_defaults.tasks` (the core+fields schema new ventures inherit).
+6. **Key-date prompt (off + ask, once):** when a source has more than one date column, the
+   most due-like is `due_date`; register each *other* date column in `fields` as
+   `{type:date, highlight:false}` and ask once — "New date column '<Col>' on <area> — make it
+   a key date (surfaces as a reminder on its day)? (y/n)". `y` → set `highlight:true`. Store the
+   decision; never re-ask.
+7. Write `context/maps/<identity>.json`.
 
 ## Mode B — Incremental sync (map exists)
-1. Re-verify each anchor still resolves; if one is gone, resolve-on-miss (re-discover) or
-   ask. Update changed IDs.
-2. Re-enumerate children under `business_root`; add new businesses / drop removed ones in
-   `resolved.businesses`. **Re-probe the `resolved.ignored` pages too** (rebuild the list),
-   so a page that has since gained a `business_tasks`-shaped DB is promoted to a business
-   instead of staying permanently ignored.
-3. Re-check each role's `db_role_schemas` against live properties; update renamed columns
-   and new select options.
-4. Write the updated `context/lifeos.map.json`.
+1. Re-verify each anchor resolves; re-discover or ask on a miss; update changed ids.
+2. Re-enumerate `group` children; add new ventures / drop removed (tombstone), re-probe
+   `resolved.ignored`.
+3. Re-check each `role_schemas` entry against live properties: **new non-date column** → add
+   to `fields` (typed, no prompt); **new date column** → add `{type:date,highlight:false}` and
+   run the key-date prompt; **column removed** → warn + tombstone (don't silently break);
+   **type changed** → update the field's `type` and warn that writes may shift.
+4. Write `context/maps/<identity>.json`.
 
 ## Always — regenerate the human summary
-Rewrite `context/notion.md` from the map: a readable tree of sections, businesses, DBs,
-and each DB's role + key properties. Add the banner:
-`<!-- GENERATED from context/lifeos.map.json by /refresh-notion — do not hand-edit -->`
+Rewrite `context/notion.md` from the new-shape map: a readable tree of areas, sources,
+ventures, and each source's core fields + declared `fields` (mark key dates). Banner:
+`<!-- GENERATED from the Life-OS map by /refresh-notion — do not hand-edit -->`
 
 ## Report
-Summarize what changed: new/removed businesses, anchor moves, schema/option changes, or
-"nothing changed." If a brand-new top-level section appeared that matches no rule, flag it
-and ask whether to map it (ask-then-remember).
+Summarize changes: new/removed ventures, anchor moves, added/renamed/removed columns, type
+changes, key-date decisions, or "nothing changed." Remind to `mapctl push` the map to the
+store when done.

@@ -1,5 +1,12 @@
 # 🚧 Continue Here — Life OS Telegram Bot
 
+> **▶ NEXT SESSION (2026-07-08):** open
+> **`lifeos-mcp/docs/superpowers/2026-07-08-skill-tool-scoping.md`** first. Phase B live
+> validation found that skills can **bypass lifeos** (the agent used the raw Notion API to dodge
+> `/add`'s due-date rule). That doc has the state, the problem, and the recommended fix
+> (**two-lane tool scoping**) with a decision still to make. The sections below are older
+> setup notes.
+
 A resume doc so you can pick this up any day. Last updated mid-build: the bot **works locally**
 (Telegram + Claude subscription + Notion + Calendar). Remaining work is **deploying to a server**,
 where Google Calendar needs token-based auth.

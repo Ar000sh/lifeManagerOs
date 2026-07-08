@@ -28,3 +28,13 @@ resource "azurerm_role_assignment" "vm_storage" {
   role_definition_name = "Storage Blob Data Contributor"
   principal_id         = azurerm_linux_virtual_machine.main.identity[0].principal_id
 }
+
+# Aroosh's own user may also READ+WRITE map blobs, so maps can be pushed/pulled with `mapctl`
+# from his laptop via `az login` (AAD, no account keys). Being subscription Owner is
+# control-plane only and does NOT grant blob data access — this explicit data-plane grant does.
+# The object id is a fixed, non-secret AAD id (az ad signed-in-user show --query id -o tsv).
+resource "azurerm_role_assignment" "map_admin_storage" {
+  scope                = azurerm_storage_account.data.id
+  role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = "b8466139-f869-4cf2-993e-46807ae4fa09"
+}

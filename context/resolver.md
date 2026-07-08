@@ -1,3 +1,7 @@
+<!-- DEPRECATED (2026-07-01): the /today /week /add skills no longer resolve Notion via this
+file — they call the lifeos MCP tools, which own resolution against the map. Kept for history
+and for /refresh-notion's conceptual reference only. -->
+
 # Resolver — how skills find things in Notion
 
 Every Life-OS skill resolves Notion targets through this procedure. **Skills never

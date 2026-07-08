@@ -26,7 +26,7 @@ class FakeLiveClient:
 
 def test_creates_and_reuses_implicit_session():
     created = []
-    manager = SessionManager(client_factory=lambda: _new_client(created), now=lambda: 100.0)
+    manager = SessionManager(client_factory=lambda chat_id=None: _new_client(created), now=lambda: 100.0)
 
     async def run():
         first, event1 = await manager.ask(111, "hello")
@@ -45,7 +45,7 @@ def test_creates_and_reuses_implicit_session():
 
 def test_upgrades_implicit_to_chat():
     created = []
-    manager = SessionManager(client_factory=lambda: _new_client(created), now=lambda: 100.0)
+    manager = SessionManager(client_factory=lambda chat_id=None: _new_client(created), now=lambda: 100.0)
 
     async def run():
         await manager.ask(111, "hello")
@@ -61,7 +61,7 @@ def test_upgrades_implicit_to_chat():
 
 def test_stop_interrupts_and_removes_session():
     created = []
-    manager = SessionManager(client_factory=lambda: _new_client(created), now=lambda: 100.0)
+    manager = SessionManager(client_factory=lambda chat_id=None: _new_client(created), now=lambda: 100.0)
 
     async def run():
         await manager.ask(111, "hello")
@@ -79,7 +79,7 @@ def test_stop_interrupts_and_removes_session():
 def test_expire_idle_disconnects_implicit_after_10_minutes():
     created = []
     now_value = 100.0
-    manager = SessionManager(client_factory=lambda: _new_client(created), now=lambda: now_value)
+    manager = SessionManager(client_factory=lambda chat_id=None: _new_client(created), now=lambda: now_value)
 
     async def run():
         await manager.ask(111, "hello")
