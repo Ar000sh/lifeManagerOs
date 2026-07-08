@@ -62,6 +62,21 @@ resource "azurerm_role_assignment" "ci_state_blob" {
   principal_id         = azurerm_user_assigned_identity.ci.principal_id
 }
 
+# App-data storage: `terraform plan` must REFRESH azurerm_storage_account.data, and
+# the azurerm provider reads that account's data-plane (e.g. queue properties) using
+# an account KEY by default — which needs the listKeys action. Plain "Reader" (above)
+# can't listKeys, so plan 403s on the storage refresh. "Reader and Data Access" is the
+# built-in role that adds exactly listKeys (+ SAS) on top of read — no write/delete.
+# This is CI reading its OWN infra for a plan; it is NOT app blob-data access (that is
+# the VM's "Storage Blob Data Contributor" grant in storage.tf). AWS parallel: letting
+# a read-only CI role call s3:GetBucket* / the equivalent of ListAccountKeys so
+# `terraform plan` can describe the bucket without a full admin policy.
+resource "azurerm_role_assignment" "ci_data_storage_read" {
+  scope                = azurerm_storage_account.data.id
+  role_definition_name = "Reader and Data Access"
+  principal_id         = azurerm_user_assigned_identity.ci.principal_id
+}
+
 # ---------------------------------------------------------------------------
 # Rollout identity — Job 2 (gated): terraform apply + az vm run-command deploy.
 # Bound to the GitHub *environment* "production" — the approval gate.
