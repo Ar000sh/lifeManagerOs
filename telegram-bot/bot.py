@@ -14,6 +14,7 @@ from telegram.ext import (
 )
 
 from agent_runner import run_agent
+from logging_config import configure_logging
 from routing import classify_message
 from sessions import SessionManager, compose_command_conversation_prompt
 
@@ -30,10 +31,8 @@ ALLOWED_CHAT_ID = int(os.environ.get("ALLOWED_CHAT_ID", "0") or "0")
 # Max characters per Telegram message.
 TELEGRAM_MAX = 4096
 
-logging.basicConfig(
-    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-    level=logging.INFO,
-)
+configure_logging()
+
 logger = logging.getLogger("lifeos-bot")
 
 # One process-wide registry of live conversations, keyed by Telegram chat id.

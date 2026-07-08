@@ -34,6 +34,8 @@ COPY telegram-bot/agent_runner.py ./agent_runner.py
 COPY telegram-bot/routing.py ./routing.py
 COPY telegram-bot/sessions.py ./sessions.py
 COPY telegram-bot/telemetry.py ./telemetry.py
+COPY telegram-bot/logging_config.py ./logging_config.py
+
 # --- Run as a non-root user ---
 # The Claude CLI refuses --dangerously-skip-permissions (what the SDK's
 # permission_mode="bypassPermissions" maps to) when running as root, so a
