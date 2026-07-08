@@ -48,3 +48,27 @@ def test_filesystem_stays_read_only(monkeypatch):
     for write_tool in ("Bash", "Write", "Edit"):
         assert write_tool in opts.disallowed_tools
     assert opts.permission_mode == "dontAsk"
+
+
+def _lifeos_only_options(monkeypatch):
+    monkeypatch.setattr(agent_runner, "NOTION_TOKEN", "ntn_test_token")
+    monkeypatch.setattr(agent_runner, "GOOGLE_OAUTH_CREDENTIALS", "/app/secrets/gcp-oauth.keys.json")
+    monkeypatch.setattr(agent_runner, "GOOGLE_CALENDAR_MCP_TOKEN_PATH", "/app/secrets/tokens")
+    return agent_runner.build_options(lifeos_only=True)
+
+
+def test_lifeos_only_registers_only_lifeos(monkeypatch):
+    """Skill lane must not even register the raw servers, so the agent can't reach them."""
+    opts = _lifeos_only_options(monkeypatch)
+    assert set(opts.mcp_servers) == {"lifeos"}
+
+
+def test_lifeos_only_allows_no_raw_servers(monkeypatch):
+    """/add is bypass-proof only if notion-api/google-calendar are absent from allowed_tools."""
+    opts = _lifeos_only_options(monkeypatch)
+    assert "mcp__lifeos" in opts.allowed_tools
+    assert "mcp__notion-api" not in opts.allowed_tools
+    assert "mcp__google-calendar" not in opts.allowed_tools
+    # read-only builtins remain so skills can still consult context files.
+    for builtin in ("Read", "Glob", "Grep"):
+        assert builtin in opts.allowed_tools

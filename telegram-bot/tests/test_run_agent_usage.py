@@ -21,7 +21,7 @@ def _patch_stream(monkeypatch, message):
     # Make isinstance(message, ResultMessage) true and AssistantMessage never match.
     monkeypatch.setattr(agent_runner, "ResultMessage", FakeResultMessage)
     monkeypatch.setattr(agent_runner, "AssistantMessage", type("NoMatch", (), {}))
-    monkeypatch.setattr(agent_runner, "build_options", lambda stderr=None, chat_id=None: None)
+    monkeypatch.setattr(agent_runner, "build_options", lambda stderr=None, chat_id=None, lifeos_only=False: None)
 
     async def fake_query(*args, **kwargs):
         yield message

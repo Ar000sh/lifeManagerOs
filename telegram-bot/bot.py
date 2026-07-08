@@ -1,7 +1,7 @@
 import os
 import asyncio
 import logging
-from time import perf_counter
+from time import perf_counter, monotonic
 
 from dotenv import load_dotenv
 from telegram import Update
@@ -38,6 +38,35 @@ logger = logging.getLogger("lifeos-bot")
 
 # One process-wide registry of live conversations, keyed by Telegram chat id.
 SESSION_MANAGER = SessionManager()
+
+# --- Pending /add state -----------------------------------------------------
+# /add runs in the deterministic lifeos-only lane as a one-shot (no shared session).
+# When a run doesn't create anything (missing due_date, ambiguous business, ...),
+# the agent asks a question — but a one-shot can't remember it. So we hold the
+# original request here; the user's NEXT plain-text reply re-runs a lifeos-only
+# /add with the request + the reply combined. Bounded so a stale entry can't hijack
+# an unrelated later message: single-use (popped on the next message) + TTL.
+PENDING_ADDS: dict[int, dict] = {}  # chat_id -> {"text": str, "at": float(monotonic)}
+PENDING_ADD_TTL_SECONDS = 300
+
+# lifeos tools whose success (created:true) means an /add actually completed.
+_ADD_TOOLS = ("mcp__lifeos__add_record", "mcp__lifeos__create_event")
+
+
+def _add_completed(result) -> bool:
+    """True if the /add run created a record/event (vs asking a clarifying question).
+
+    Reads the lifeos tool results: a successful add_record/create_event returns
+    ``{"created": true, ...}``; a held one returns ``{"created": false, "error": ...}``
+    (missing_required / ambiguous_destination). No create tool call at all also counts
+    as not completed, so the follow-up reply retries the add.
+    """
+    for r in result.tool_results:
+        if r.get("name") in _ADD_TOOLS and not r.get("is_error"):
+            content = str(r.get("content", "")).lower()
+            if "created" in content and "true" in content:
+                return True
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -88,6 +117,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     logger.info("Prompt: %s", text)
     logger.info("Route %s", route)
 
+    # Consume any pending /add: this message either answers it (plain text, still
+    # fresh) or supersedes it (a new command / timeout) — either way it's popped.
+    pending_add = PENDING_ADDS.pop(chat_id, None)
+    continuing_add = (
+        route.kind == "conversation"
+        and pending_add is not None
+        and (monotonic() - pending_add["at"]) < PENDING_ADD_TTL_SECONDS
+    )
+
     # --- session control messages (no agent run, no telemetry timing) ----
     if route.kind == "stop":
         await SESSION_MANAGER.stop(chat_id)
@@ -109,8 +147,34 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     session_mode = "standalone"
     session_event = None
     try:
-        if route.kind == "standalone_command":
-            # Bare /today, /week, /add: one-shot, never touches a live session.
+        if continuing_add:
+            # The user is answering the question a held /add asked. Re-run the
+            # deterministic lifeos-only /add with the original request + this reply.
+            combined = (
+                f"{pending_add['text']}\n\n"
+                f"Additional detail from the user's reply: {text}"
+            )
+            result = await run_agent(combined, chat_id=chat_id, lifeos_only=True)
+            reply = result.reply
+            session_mode = "standalone"
+            if not _add_completed(result):
+                # Still missing something — keep accumulating for the next reply.
+                PENDING_ADDS[chat_id] = {"text": combined, "at": monotonic()}
+        elif route.skill == "add":
+            # Deterministic skill lane: /add ALWAYS runs as a lifeos-only one-shot
+            # (raw notion-api/google-calendar tools removed) so it cannot bypass
+            # lifeos' rules — e.g. creating a task with no due_date via raw Notion.
+            # This overrides the session routing below for both bare /add and
+            # "/add <details>". See docs/superpowers/2026-07-08-skill-tool-scoping.md.
+            result = await run_agent(text, chat_id=chat_id, lifeos_only=True)
+            reply = result.reply
+            session_mode = "standalone"
+            if not _add_completed(result):
+                # The agent asked for a missing field — hold the request so the
+                # user's next plain-text reply completes it (no shared session).
+                PENDING_ADDS[chat_id] = {"text": text, "at": monotonic()}
+        elif route.kind == "standalone_command":
+            # Bare /today, /week: one-shot, never touches a live session.
             result = await run_agent(route.command_text or text, chat_id=chat_id)
             reply = result.reply
             session_mode = "standalone"
